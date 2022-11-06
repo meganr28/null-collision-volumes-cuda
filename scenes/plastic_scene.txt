@@ -1,0 +1,197 @@
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	40 40 40
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	1
+
+// Diffuse white
+MATERIAL 1
+R_COLOR        	0.85 0.81 0.78
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR     		0
+EMITTANCE   	0
+
+// Diffuse red
+MATERIAL 2
+R_COLOR         0.63 0.065 0.05
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR     		0
+EMITTANCE   	0
+
+// Diffuse green
+MATERIAL 3
+R_COLOR         0.14 0.45 0.091
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR     		0
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 4
+R_COLOR         0.1 0.6 1
+T_COLOR     	0.95 0.95 0.95
+SPEC_PLASTIC
+IOR     		1.65
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 5
+R_COLOR         1 0.4 0.1
+T_COLOR     	0.95 0.95 0.95
+SPEC_PLASTIC
+IOR     		1.65
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 6
+R_COLOR         0.1 0.6 1
+T_COLOR     	0 0 0
+SPEC_BRDF
+IOR     		1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 7
+R_COLOR         1 0.4 0.1
+T_COLOR     	0 0 0
+SPEC_BRDF
+IOR     		1.55
+EMITTANCE   	0
+
+// Camera
+CAMERA
+RES         1024 1024
+FOVY        19.5
+ITERATIONS  5000
+DEPTH       8
+FILE        cornell
+FOCAL_DISTANCE	16.0
+LENS_RADIUS		0.0
+EYE         0.0 2.5 18
+LOOKAT      0 2.5 0
+UP          0 1 0
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+TRANS       0 7.45 0
+ROTAT       90 0 0
+SCALE       3 3 1
+
+// Floor
+OBJECT 1
+squareplane
+material 1
+TRANS       0 -2.5 0
+ROTAT       270 0 0
+SCALE       10 10 10
+
+// Ceiling
+OBJECT 2
+squareplane
+material 1
+TRANS       0 7.5 0
+ROTAT       90 0 0
+SCALE       10 10 10
+
+// Back wall
+OBJECT 3
+squareplane
+material 1
+TRANS       0 2.5 -5
+ROTAT       0 0 0
+SCALE       10 10 10
+
+// Left wall
+OBJECT 4
+squareplane
+material 2
+TRANS       -5 2.5 0
+ROTAT       0 90 0
+SCALE       10 10 10
+
+// Right wall
+OBJECT 5
+squareplane
+material 3
+TRANS       5 2.5 0
+ROTAT       0 270 0
+SCALE       10 10 10
+
+// front wall
+OBJECT 6
+squareplane
+material 1
+TRANS       0 2.5 5
+ROTAT       180 0 0
+SCALE       10 10 10
+
+// sphere
+OBJECT 7
+sphere
+material 4
+TRANS       3 -1.0 3
+ROTAT       0 0 0
+SCALE       3 3 3
+
+// sphere
+OBJECT 8
+sphere
+material 4
+TRANS       3 1.5 3
+ROTAT       0 0 0
+SCALE       2 2 2
+
+// sphere
+OBJECT 9
+sphere
+material 4
+TRANS       3 3 3
+ROTAT       0 0 0
+SCALE       1 1 1
+
+// sphere
+OBJECT 10
+sphere
+material 5
+TRANS       -3 -1.0 -3
+ROTAT       0 0 0
+SCALE       3 3 3
+
+// sphere
+OBJECT 11
+sphere
+material 5
+TRANS       -3 1.5 -3
+ROTAT       0 0 0
+SCALE       2 2 2
+
+// sphere
+OBJECT 12
+sphere
+material 5
+TRANS       -3 3 -3
+ROTAT       0 0 0
+SCALE       1 1 1
+
+// sphere
+OBJECT 13
+sphere
+material 6
+TRANS       -0.5 -1.75 2
+ROTAT       0 0 0
+SCALE       1.5 1.5 1.5
+
+// sphere
+OBJECT 14
+sphere
+material 7
+TRANS       0.5 -1.75 -2
+ROTAT       0 0 0
+SCALE       1.5 1.5 1.5
+

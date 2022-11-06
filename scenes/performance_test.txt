@@ -1,0 +1,191 @@
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	40 20 10
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	2
+
+// Diffuse white
+MATERIAL 1
+R_COLOR         0.24 0.25 0.22
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse red
+MATERIAL 2
+R_COLOR         0.34 0.45 0.66
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse green
+MATERIAL 3
+R_COLOR         0.24 0.25 0.22
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 4
+R_COLOR         0.46 0.98 0.65
+T_COLOR     	0.77 0.91 0.75
+SPEC_GLASS
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 5
+R_COLOR         0.3 0.8 0.9
+T_COLOR     	0.46 0.55 0.97
+DIFFUSE_BDRF
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 6
+R_COLOR         0.85 0.9 0.95
+T_COLOR     	0.46 0.55 0.97
+SPEC_BRDF
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 7
+R_COLOR         0.95 0.71 0.33
+T_COLOR     	0.95 0.95 0.95
+SPEC_PLASTIC
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 8
+R_COLOR         0.81 0.91 0.66
+T_COLOR     	0.95 0.75 0.65
+SPEC_GLASS
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 9
+R_COLOR         0.95 0.71 0.33
+T_COLOR     	0.54 0.91 0.61
+SPEC_GLASS
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 10
+R_COLOR         0.95 0.71 0.33
+T_COLOR     	0.89 0.67 0.81
+SPEC_GLASS
+IOR    			1.55
+EMITTANCE   	0
+
+// Camera
+CAMERA
+RES         1920 1080
+FOVY        19.5
+ITERATIONS  20000
+DEPTH       8
+FILE        cornell
+FOCAL_DISTANCE	17.9
+LENS_RADIUS		0.0
+EYE         0.0 -4.5 14
+LOOKAT      0 0 0
+UP          0 1 0
+
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+TRANS       -4.85 0 -2
+ROTAT       0 60 0
+SCALE       3 2 1
+
+// Floor
+OBJECT 1
+squareplane
+material 1
+TRANS       0 -2.5 0
+ROTAT       270 0 0
+SCALE       20 10 10
+
+// Ceiling
+OBJECT 2
+squareplane
+material 1
+TRANS       0 7.5 0
+ROTAT       90 0 0
+SCALE       20 10 10
+
+// Back wall
+OBJECT 3
+squareplane
+material 1
+TRANS       0 2.5 -5
+ROTAT       0 0 0
+SCALE       20 10 10
+
+// Left wall
+OBJECT 4
+squareplane
+material 2
+TRANS       -10 2.5 0
+ROTAT       0 90 0
+SCALE       10 10 10
+
+// Right wall
+OBJECT 5
+squareplane
+material 2
+TRANS       10 2.5 0
+ROTAT       0 270 0
+SCALE       10 10 10
+
+// front wall
+OBJECT 6
+squareplane
+material 1
+TRANS       0 2.5 5
+ROTAT       180 0 0
+SCALE       20 10 10
+
+// OBJTEST
+OBJECT 7
+mesh
+../scenes/performance_test/teapot.obj
+material 4
+TRANS       0 2 0
+ROTAT       0 0 0
+SCALE       6 6 6
+
+// OBJTEST
+OBJECT 8
+cube
+material 2
+TRANS       7 -1.9 -3
+ROTAT       0 0 0
+SCALE       3 1.5 3
+
+// OBJTEST
+OBJECT 9
+mesh
+../scenes/performance_test/teapot_2.obj
+material 4
+TRANS       0 2 0
+ROTAT       0 0 0
+SCALE       6 6 6
+
+// OBJTEST
+OBJECT 10
+sphere
+material 2
+TRANS       -6 -1 2
+ROTAT       0 0 0
+SCALE       3 3 3

@@ -1,0 +1,188 @@
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	1 1 1
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	1
+
+// Diffuse white
+MATERIAL 1
+R_COLOR        	0.85 0.81 0.78
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR     		0
+EMITTANCE   	0
+
+// Diffuse red
+MATERIAL 2
+R_COLOR         0.63 0.265 0.05
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR     		0
+EMITTANCE   	0
+
+// Diffuse green
+MATERIAL 3
+R_COLOR         0.14 0.45 0.391
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR     		0
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 4
+R_COLOR         0.4 0.25 0.74
+T_COLOR     	0.21 0.45 0.8
+SPEC_GLASS
+IOR     		1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 5
+R_COLOR         0.67 0.85 0.2
+T_COLOR     	1 0.4 0.1
+SPEC_GLASS
+IOR     		1.55
+EMITTANCE   	0
+
+// Emissive material (light)
+MATERIAL 		6
+R_COLOR        	40 40 40
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	1
+
+// Camera
+CAMERA
+RES         1024 1024
+FOVY        19.5
+ITERATIONS  5000
+DEPTH       4
+FILE        cornell
+FOCAL_DISTANCE	5.0
+LENS_RADIUS		0
+EYE         0.0 2.5 18
+LOOKAT      0 2.5 0
+UP          0 1 0
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+TRANS       0 7.45 0
+ROTAT       90 0 0
+SCALE       3 3 1
+
+// Floor
+OBJECT 1
+squareplane
+material 1
+TRANS       0 -2.5 0
+ROTAT       270 0 0
+SCALE       10 10 10
+
+// Ceiling
+OBJECT 2
+squareplane
+material 1
+TRANS       0 7.5 0
+ROTAT       90 0 0
+SCALE       10 10 10
+
+// Back wall
+OBJECT 3
+squareplane
+material 1
+TRANS       0 2.5 -5
+ROTAT       0 0 0
+SCALE       10 10 10
+
+// Left wall
+OBJECT 4
+squareplane
+material 2
+TRANS       -5 2.5 0
+ROTAT       0 90 0
+SCALE       10 10 10
+
+// Right wall
+OBJECT 5
+squareplane
+material 3
+TRANS       5 2.5 0
+ROTAT       0 270 0
+SCALE       10 10 10
+
+// front wall
+OBJECT 6
+squareplane
+material 1
+TRANS       0 2.5 5
+ROTAT       180 0 0
+SCALE       10 10 10
+
+// OBJTEST
+OBJECT 7 
+sphere
+material 4
+TRANS       -2 0 0
+ROTAT       0 0 0
+SCALE       3 3 3
+
+// OBJTEST
+OBJECT 8 
+sphere
+material 5
+TRANS       2 0 0
+ROTAT       0 0 0
+SCALE       3 3 3
+
+// Ceiling light
+OBJECT 9
+squareplane
+material 6
+TRANS       -4 4.45 0
+ROTAT       90 0 0
+SCALE       1 1 1
+
+// Ceiling light
+OBJECT 10
+squareplane
+material 6
+TRANS       4 4.45 0
+ROTAT       90 0 0
+SCALE       1 1 1
+
+// Ceiling light
+OBJECT 11
+squareplane
+material 6
+TRANS       -4 4.45 -4
+ROTAT       90 0 0
+SCALE       1 1 1
+
+// Ceiling light
+OBJECT 12
+squareplane
+material 6
+TRANS       4 4.45 -4
+ROTAT       90 0 0
+SCALE       1 1 1
+
+// Ceiling light
+OBJECT 13
+squareplane
+material 6
+TRANS       -4 4.45 4
+ROTAT       90 0 0
+SCALE       1 1 1
+
+// Ceiling light
+OBJECT 14
+squareplane
+material 6
+TRANS       4 4.45 4
+ROTAT       90 0 0
+SCALE       1 1 1
