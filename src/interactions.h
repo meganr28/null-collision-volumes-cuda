@@ -49,7 +49,7 @@ glm::vec3 calculateRandomDirectionInHemisphere(
 // and https://en.wikipedia.org/wiki/Schlick%27s_approximation
 // and https://en.wikipedia.org/wiki/Fresnel_equations
 
-inline __host__ __device__ glm::vec3 fresnelDielectric(float cos_theta_i, float etaT) {
+inline __device__ glm::vec3 fresnelDielectric(float cos_theta_i, float etaT) {
     
     // assume scene medium is air
     float etaI = 1.0f;
@@ -101,7 +101,7 @@ inline __host__ __device__ glm::vec3 fresnelDielectric(float cos_theta_i, float 
 #endif
 }
 
-inline __host__ __device__
+inline __device__
 void scatterRay(
         PathSegment& r,
         glm::vec3 intersect,

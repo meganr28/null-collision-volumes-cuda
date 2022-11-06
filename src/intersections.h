@@ -22,23 +22,7 @@ inline __host__ __device__ inline unsigned int utilhash(unsigned int a) {
     return a;
 }
 
-// CHECKITOUT
-/**
- * Compute a point at parameter value `t` on ray `r`.
- * Falls slightly short so that it doesn't intersect the object it's hitting.
- */
-inline __host__ __device__ glm::vec3 getPointOnRay(Ray r, float t) {
-    return r.origin + t * glm::normalize(r.direction);
-}
-
-/**
- * Multiplies a mat4 and a vec4 and returns a vec3 clipped from the vec4.
- */
-inline __host__ __device__ glm::vec3 multiplyMV(glm::mat4 m, glm::vec4 v) {
-    return glm::vec3(m * v);
-}
-
-inline __host__ __device__ float squareplaneIntersectionTest(Geom& squareplane, Ray& r, glm::vec3& normal) {
+inline __device__ float squareplaneIntersectionTest(Geom& squareplane, Ray& r, glm::vec3& normal) {
     Ray q;
     q.origin = glm::vec3(squareplane.inverseTransform * glm::vec4(r.origin, 1.0f));
     q.direction = glm::normalize(glm::vec3(squareplane.inverseTransform * glm::vec4(r.direction, 0.0f)));
@@ -65,7 +49,7 @@ inline __host__ __device__ float squareplaneIntersectionTest(Geom& squareplane, 
  * @param outside            Output param for whether the ray came from outside.
  * @return                   Ray parameter `t` value. -1 if no intersection.
  */
-inline __host__ __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec3 &normal) {
+inline __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec3 &normal) {
     Ray q;
     q.origin    = glm::vec3(box.inverseTransform *glm::vec4(r.origin   , 1.0f));
     q.direction = glm::normalize(glm::vec3(box.inverseTransform * glm::vec4(r.direction, 0.0f)));
@@ -124,7 +108,7 @@ inline __host__ __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec
  * @param outside            Output param for whether the ray came from outside.
  * @return                   Ray parameter `t` value. -1 if no intersection.
  */
-inline __host__ __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, glm::vec3 &normal) {
+inline __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, glm::vec3 &normal) {
 
     glm::vec3 ro = glm::vec3(sphere.inverseTransform * glm::vec4(r.origin, 1.0f));
     glm::vec3 rd = glm::normalize(glm::vec3(sphere.inverseTransform * glm::vec4(r.direction, 0.0f)));

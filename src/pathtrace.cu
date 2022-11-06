@@ -182,7 +182,7 @@ __global__ void generateRayFromThinLensCamera(Camera cam, int iter, int traceDep
 			- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
 		);
 
-		segment.ray.direction_inv = 1.0f / glm::vec3(segment.ray.direction);
+		segment.ray.direction_inv = 1.0f / segment.ray.direction;
 
 		segment.remainingBounces = traceDepth;
 
@@ -218,7 +218,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, floa
 			- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
 		);
 
-		segment.ray.direction_inv = 1.0f / glm::vec3(segment.ray.direction);
+		segment.ray.direction_inv = 1.0f / segment.ray.direction;
 
 		segment.remainingBounces = traceDepth;
 
@@ -979,7 +979,7 @@ __global__ void shadeMaterialUberKernel(
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0, 1.0);
 
-		Material material = materials[intersection.materialId];
+		Material m = materials[intersection.materialId];
 
 		glm::vec3 intersect_point = pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction;
 
@@ -992,10 +992,115 @@ __global__ void shadeMaterialUberKernel(
 
 
 		// GI LTE
-		scatterRay(pathSegments[idx], intersect_point,
+		/*scatterRay(pathSegments[idx], intersect_point,
 			intersection.surfaceNormal,
-			material,
-			rng, u01);
+			m,
+			rng, u01);*/
+
+		glm::vec3 wi = glm::vec3(0.0f);
+		glm::vec3 f = glm::vec3(0.0f);
+		float pdf = 0.0f;
+		float absDot = 0.0f;
+
+		//thrust::uniform_real_distribution<float> u01(0, 1);
+
+		// Physically based BSDF sampling influenced by PBRT
+		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
+		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
+
+		if (m.type == SPEC_BRDF) {
+			wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
+			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+			pdf = 1.0f;
+			if (absDot >= -0.0001f && absDot <= -0.0001f) {
+				f = m.R;
+			}
+			else {
+				f = m.R / absDot;
+			}
+		}
+		else if (m.type == SPEC_BTDF) {
+			// spec refl
+			float eta = m.ior;
+			if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0001f) {
+				// outside
+				eta = 1.0f / eta;
+				wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
+			}
+			else {
+				// inside
+				wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
+			}
+			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+			pdf = 1.0f;
+			if (glm::length(wi) <= 0.0001f) {
+				// total internal reflection
+				f = glm::vec3(0.0f);
+			}
+			else if (absDot >= -0.0001f && absDot <= -0.0001f) {
+				f = m.T;
+			}
+			else {
+				f = m.T / absDot;
+			}
+		}
+		else if (m.type == SPEC_GLASS) {
+			// spec glass
+			float eta = m.ior;
+			if (u01(rng) < 0.5f) {
+				// spec refl
+				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
+				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+				pdf = 1.0f;
+				if (absDot == 0.0f) {
+					f = m.R;
+				}
+				else {
+					f = m.R / absDot;
+				}
+				f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
+			}
+			else {
+				// spec refr
+				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
+					// outside
+					eta = 1.0f / eta;
+					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
+				}
+				else {
+					// inside
+					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
+				}
+				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+				pdf = 1.0f;
+				if (glm::length(wi) <= 0.0001f) {
+					// total internal reflection
+					f = glm::vec3(0.0f);
+				}
+				if (absDot == 0.0f) {
+					f = m.T;
+				}
+				else {
+					f = m.T / absDot;
+				}
+				f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
+			}
+			f *= 2.0f;
+		}
+		else {
+			// diffuse
+			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+			pdf = absDot * 0.31831f;
+			f = m.R * 0.31831f;
+		}
+
+		pathSegments[idx].rayThroughput *= f * absDot / pdf;
+
+		// Change ray direction
+		pathSegments[idx].ray.direction = wi;
+		pathSegments[idx].ray.direction_inv = 1.0f / wi;
+		pathSegments[idx].ray.origin = intersect_point + (wi * 0.001f);
 		pathSegments[idx].remainingBounces--;
 	}
 }
