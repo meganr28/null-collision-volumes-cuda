@@ -17,7 +17,6 @@
 #include "interactions.h"
 
 #define ERRORCHECK 1
-#define ANTI_ALIASING
 
 #define BLOCK_SIZE_1D 128
 #define BLOCK_SIZE_2D 16
@@ -27,7 +26,7 @@
 
 #define ENABLE_RECTS
 #define ENABLE_SPHERES
-#define ENABLE_TRIS
+//#define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
 

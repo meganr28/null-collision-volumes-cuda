@@ -40,16 +40,15 @@ inline __host__ __device__ glm::vec3 multiplyMV(glm::mat4 m, glm::vec4 v) {
 
 inline __host__ __device__ float squareplaneIntersectionTest(Geom& squareplane, Ray& r, glm::vec3& normal) {
     Ray q;
-    q.origin = multiplyMV(squareplane.inverseTransform, glm::vec4(r.origin, 1.0f));
-    q.direction = glm::normalize(multiplyMV(squareplane.inverseTransform, glm::vec4(r.direction, 0.0f)));
+    q.origin = glm::vec3(squareplane.inverseTransform * glm::vec4(r.origin, 1.0f));
+    q.direction = glm::normalize(glm::vec3(squareplane.inverseTransform * glm::vec4(r.direction, 0.0f)));
 
     float t = glm::dot(glm::vec3(0.0f, 0.0f, 1.0f), (glm::vec3(0.5f, 0.5f, 0.0f) - q.origin)) / glm::dot(glm::vec3(0.0f, 0.0f, 1.0f), q.direction);
-    glm::vec3 objspaceIntersection = getPointOnRay(q, t);
+    glm::vec3 objspaceIntersection = q.origin + t * q.direction;
 
     if (t > 0.0001f && objspaceIntersection.x >= -0.5001f && objspaceIntersection.x <= 0.5001f && objspaceIntersection.y >= -0.5001f && objspaceIntersection.y <= 0.5001f) {
-        glm::vec3 intersectionPoint = multiplyMV(squareplane.transform, glm::vec4(objspaceIntersection, 1.0f));
-        normal = glm::normalize(multiplyMV(squareplane.invTranspose, glm::vec4(0.0f, 0.0f, 1.0f, 0.0f)));
-        return glm::length(r.origin - intersectionPoint);
+        normal = glm::normalize(glm::vec3(squareplane.invTranspose * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f)));
+        return glm::length(r.origin - glm::vec3(squareplane.transform * glm::vec4(objspaceIntersection, 1.0f)));
     }
 
     return MAX_INTERSECT_DIST;
@@ -68,30 +67,39 @@ inline __host__ __device__ float squareplaneIntersectionTest(Geom& squareplane, 
  */
 inline __host__ __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec3 &normal) {
     Ray q;
-    q.origin    =                multiplyMV(box.inverseTransform, glm::vec4(r.origin   , 1.0f));
-    q.direction = glm::normalize(multiplyMV(box.inverseTransform, glm::vec4(r.direction, 0.0f)));
+    q.origin    = glm::vec3(box.inverseTransform *glm::vec4(r.origin   , 1.0f));
+    q.direction = glm::normalize(glm::vec3(box.inverseTransform * glm::vec4(r.direction, 0.0f)));
 
-    float tmin = -1e38f;
-    float tmax = 1e38f;
+    float tmin = -MAX_INTERSECT_DIST;
+    float tmax = MAX_INTERSECT_DIST;
     glm::vec3 tmin_n;
     glm::vec3 tmax_n;
+    
+    float t1;
+    float t2;
+    float ta;
+    float tb;
+#pragma unroll
     for (int xyz = 0; xyz < 3; ++xyz) {
-        float qdxyz = q.direction[xyz];
-        /*if (glm::abs(qdxyz) > 0.00001f)*/ {
-            float t1 = (-0.5f - q.origin[xyz]) / qdxyz;
-            float t2 = (+0.5f - q.origin[xyz]) / qdxyz;
-            float ta = glm::min(t1, t2);
-            float tb = glm::max(t1, t2);
-            glm::vec3 n;
-            n[xyz] = t2 < t1 ? +1.0f : -1.0f;
-            if (ta > 0.0f && ta > tmin) {
-                tmin = ta;
-                tmin_n = n;
-            }
-            if (tb < tmax) {
-                tmax = tb;
-                tmax_n = n;
-            }
+        t1 = (-0.5f - q.origin[xyz]) / q.direction[xyz];
+        t2 = (+0.5f - q.origin[xyz]) / q.direction[xyz];
+        if (t1 < t2) {
+            ta = t1;
+            tb = t2;
+        }
+        else {
+            tb = t1;
+            ta = t2;
+        }
+        glm::vec3 n;
+        n[xyz] = t2 < t1 ? +1.0f : -1.0f;
+        if (ta > 0.0f && ta > tmin) {
+            tmin = ta;
+            tmin_n = n;
+        }
+        if (tb < tmax) {
+            tmax = tb;
+            tmax_n = n;
         }
     }
 
@@ -100,9 +108,8 @@ inline __host__ __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec
             tmin = tmax;
             tmin_n = tmax_n;
         }
-        glm::vec3 intersectionPoint = multiplyMV(box.transform, glm::vec4(getPointOnRay(q, tmin), 1.0f));
-        normal = glm::normalize(multiplyMV(box.invTranspose, glm::vec4(tmin_n, 0.0f)));
-        return glm::length(r.origin - intersectionPoint);
+        normal = glm::normalize(glm::vec3(box.invTranspose * glm::vec4(tmin_n, 0.0f)));
+        return glm::length(r.origin - glm::vec3(box.transform * glm::vec4(q.origin + tmin * q.direction, 1.0f)));
     }
     return MAX_INTERSECT_DIST;
 }
@@ -118,39 +125,33 @@ inline __host__ __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec
  * @return                   Ray parameter `t` value. -1 if no intersection.
  */
 inline __host__ __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, glm::vec3 &normal) {
-    float radius = 0.5f;
 
-    glm::vec3 ro = multiplyMV(sphere.inverseTransform, glm::vec4(r.origin, 1.0f));
-    glm::vec3 rd = glm::normalize(multiplyMV(sphere.inverseTransform, glm::vec4(r.direction, 0.0f)));
+    glm::vec3 ro = glm::vec3(sphere.inverseTransform * glm::vec4(r.origin, 1.0f));
+    glm::vec3 rd = glm::normalize(glm::vec3(sphere.inverseTransform * glm::vec4(r.direction, 0.0f)));
 
-    Ray rt;
-    rt.origin = ro;
-    rt.direction = rd;
-
-    float vDotDirection = glm::dot(rt.origin, rt.direction);
-    float radicand = vDotDirection * vDotDirection - (glm::dot(rt.origin, rt.origin) - powf(radius, 2.0f));
-    if (radicand < 0.0f) {
+    float vDotDirection = glm::dot(ro, rd);
+    float radicand_and_t = vDotDirection * vDotDirection - (glm::dot(ro, ro) - 0.25f);
+    if (radicand_and_t < 0.0f) {
         return MAX_INTERSECT_DIST;
     }
 
-    float squareRoot = sqrt(radicand);
-    float firstTerm = -vDotDirection;
-    float t1 = firstTerm + squareRoot;
-    float t2 = firstTerm - squareRoot;
+    float squareRoot = glm::sqrt(radicand_and_t);
+    float t1 = -vDotDirection + squareRoot;
+    float t2 = -vDotDirection - squareRoot;
 
-    float t = 0.0f;
     if (t1 < 0.0f && t2 < 0.0f) {
         return MAX_INTERSECT_DIST;
-    } else if (t1 > 0.0f && t2 > 0.0f) {
-        t = min(t1, t2);
-    } else {
-        t = max(t1, t2);
+    } 
+    else if (t1 > 0.0f && t2 > 0.0f) {
+        radicand_and_t = glm::min(t1, t2);
+    } 
+    else {
+        radicand_and_t = glm::max(t1, t2);
     }
 
-    glm::vec3 objspaceIntersection = getPointOnRay(rt, t);
+    glm::vec3 objspaceIntersection = ro + radicand_and_t * rd;
 
-    glm::vec3 intersectionPoint = multiplyMV(sphere.transform, glm::vec4(objspaceIntersection, 1.0f));
-    normal = glm::normalize(multiplyMV(sphere.invTranspose, glm::vec4(objspaceIntersection, 0.0f)));
+    normal = glm::normalize(glm::vec3(sphere.invTranspose * glm::vec4(objspaceIntersection, 0.0f)));
 
-    return glm::length(r.origin - intersectionPoint);
+    return glm::length(r.origin - glm::vec3(sphere.transform * glm::vec4(objspaceIntersection, 1.0f)));
 }
