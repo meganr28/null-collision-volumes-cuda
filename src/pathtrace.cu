@@ -26,7 +26,7 @@
 
 #define ENABLE_RECTS
 #define ENABLE_SPHERES
-//#define ENABLE_TRIS
+#define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
 
