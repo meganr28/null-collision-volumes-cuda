@@ -598,6 +598,9 @@ __global__ void genMISRaysKernel(
 		else {
 			// diffuse
 			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+			if (material.type == DIFFUSE_BTDF) {
+				wi = -wi;
+			}
 			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
 			pdf_B = absDot * 0.31831f;
 			f = material.R * 0.31831f; // INV_PI
@@ -1090,6 +1093,9 @@ __global__ void shadeMaterialUberKernel(
 		else {
 			// diffuse
 			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+			if (m.type == DIFFUSE_BTDF) {
+				wi = -wi;
+			}
 			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
 			pdf = absDot * 0.31831f;
 			f = m.R * 0.31831f;
