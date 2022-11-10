@@ -9,6 +9,10 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
   * [LinkedIn](https://www.linkedin.com/in/meganr25a949125/), [personal website](https://meganr28.github.io/)
 * Tested on: Windows 10, AMD Ryzen 9 5900HS with Radeon Graphics @ 3301 MHz 16GB, NVIDIA GeForce RTX 3060 Laptop GPU 6GB (Personal Computer)
 
+### Presentations
+
+[Final Project Pitch](https://docs.google.com/presentation/d/1bVFEcVQq_lp9oRMo1wMy-prI_6DmvS1U/edit?usp=sharing&ouid=114838708762215680291&rtpof=true&sd=true)
+
 ### Build Instructions
 
 To build this project, ensure that you have a **CUDA-enabled** NVIDIA GPU. We have provided some other
