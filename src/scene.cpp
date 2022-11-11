@@ -24,6 +24,10 @@ Scene::Scene(string filename) {
                 loadMaterial(tokens[1]);
                 cout << " " << endl;
             } 
+            else if (strcmp(tokens[0].c_str(), "MEDIUM") == 0) {
+                loadMedium(tokens[1]);
+                cout << " " << endl;
+            }
             else if (strcmp(tokens[0].c_str(), "OBJECT") == 0) {
                 loadGeom(tokens[1]);
                 cout << " " << endl;
@@ -253,7 +257,7 @@ int Scene::loadCamera() {
     float fovy;
 
     //load static properties
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 8; i++) {
         string line;
         utilityCore::safeGetline(fp_in, line);
         vector<string> tokens = utilityCore::tokenizeString(line);
@@ -274,6 +278,9 @@ int Scene::loadCamera() {
         }
         else if (strcmp(tokens[0].c_str(), "LENS_RADIUS") == 0) {
             camera.lens_radius = atof(tokens[1].c_str());
+        }
+        else if (strcmp(tokens[0].c_str(), "MEDIUM") == 0) {
+            camera.medium = atoi(tokens[1].c_str());
         }
     }
 
@@ -361,6 +368,41 @@ int Scene::loadMaterial(string materialid) {
             }
         }
         materials.push_back(newMaterial);
+        return 1;
+    }
+}
+
+int Scene::loadMedium(string mediumid) {
+    int id = atoi(mediumid.c_str());
+    if (id != media.size()) {
+        cout << "ERROR: MEDIUM ID does not match expected number of media" << endl;
+        return -1;
+    }
+    else {
+        cout << "Loading Medium " << id << "..." << endl;
+        HomogeneousMedium newHomogeneousMedium;
+
+        //load static properties
+        for (int i = 0; i < 3; i++) {
+            string line;
+            utilityCore::safeGetline(fp_in, line);
+            vector<string> tokens = utilityCore::tokenizeString(line);
+            if (strcmp(tokens[0].c_str(), "ABSORPTION") == 0) {
+                float sa = atof(tokens[1].c_str());
+                glm::vec3 sigma_a(sa, sa, sa);
+                newHomogeneousMedium.sigma_a = sigma_a;
+            }
+            else if (strcmp(tokens[0].c_str(), "SCATTERING") == 0) {
+                float ss = atof(tokens[1].c_str());
+                glm::vec3 sigma_s(ss, ss, ss);
+                newHomogeneousMedium.sigma_s = sigma_s;
+            }
+            else if (strcmp(tokens[0].c_str(), "ASYM_G") == 0) {
+                newHomogeneousMedium.g = atof(tokens[1].c_str());
+            }
+        }
+        newHomogeneousMedium.sigma_t = newHomogeneousMedium.sigma_a + newHomogeneousMedium.sigma_s;
+        media.push_back(newHomogeneousMedium);
         return 1;
     }
 }

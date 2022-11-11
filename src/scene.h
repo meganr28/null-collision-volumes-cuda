@@ -7,6 +7,7 @@
 #include "glm/glm.hpp"
 #include "utilities.h"
 #include "sceneStructs.h"
+#include "volumeStructs.h"
 
 using namespace std;
 
@@ -14,6 +15,7 @@ class Scene {
 private:
     ifstream fp_in;
     int loadMaterial(string materialid);
+    int loadMedium(string mediumid);
     int loadGeom(string objectid);
     int loadCamera();
 
@@ -33,6 +35,7 @@ public:
     //std::vector<Mesh> meshes;
     std::vector<Light> lights;
     std::vector<Material> materials;
+    std::vector<HomogeneousMedium> media;
 
     std::vector<Tri> mesh_tris;
     std::vector<Tri> mesh_tris_sorted;

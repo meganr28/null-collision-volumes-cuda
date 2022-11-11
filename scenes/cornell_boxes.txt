@@ -38,15 +38,22 @@ DIFFUSE_BRDF
 IOR    			1.55
 EMITTANCE   	0
 
+// Homogeneous medium
+MEDIUM 0
+ABSORPTION 0.2
+SCATTERING 0.6
+ASYM_G     0.8
+
 // Camera
 CAMERA
-RES         1024 1024
+RES         512 512
 FOVY        19.5
 ITERATIONS  5000
 DEPTH       5
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
+MEDIUM      0
 EYE         0.0 2.5 18
 LOOKAT      0 2.5 0
 UP          0 1 0
