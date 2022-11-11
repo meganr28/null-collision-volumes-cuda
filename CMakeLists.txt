@@ -76,6 +76,7 @@ set(headers
     src/tiny_obj_loader.h
     src/ImGui/imconfig.h
     src/lbvh.h
+    src/volumeStructs.h
 	
 	src/ImGui/imgui.h
     src/ImGui/imconfig.h

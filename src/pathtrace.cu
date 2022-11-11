@@ -8,6 +8,7 @@
 #include <thrust/partition.h>
 
 #include "sceneStructs.h"
+#include "volumeStructs.h"
 #include "scene.h"
 #include "glm/glm.hpp"
 #include "glm/gtx/norm.hpp"
@@ -1332,6 +1333,101 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 			dev_paths,
 			dev_materials
 			);
+
+		// RUSSIAN ROULETTE
+		if (depth >= 5) {
+
+			russianRouletteKernel << <numblocksPathSegmentTracing, blockSize1d >> > (
+				iter,
+				pixelcount,
+				dev_paths
+				);
+
+		}
+
+		if (depth == traceDepth) { iterationComplete = true; }
+
+		if (guiData != NULL)
+		{
+			guiData->TracedDepth = depth;
+		}
+	}
+
+
+	// Assemble this iteration and apply it to the image
+	finalGather << <numblocksPathSegmentTracing, blockSize1d >> > (pixelcount, dev_image, dev_paths);
+
+	// Send results to OpenGL buffer for rendering
+	sendImageToPBO << <blocksPerGrid2d, blockSize2d >> > (pbo, cam.resolution, iter, dev_image);
+
+	// Retrieve image from GPU
+	cudaMemcpy(hst_scene->state.image.data(), dev_image,
+		pixelcount * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+}
+
+void volPathtrace(uchar4* pbo, int frame, int iter) {
+
+	//std::cout << "============================== " << iter << " ==============================" << std::endl;
+
+	const int traceDepth = hst_scene->state.traceDepth;
+	const Camera& cam = hst_scene->state.camera;
+
+	// 2D block for generating ray from camera
+	const dim3 blockSize2d(BLOCK_SIZE_2D, BLOCK_SIZE_2D);
+	const dim3 blocksPerGrid2d(
+		(cam.resolution.x + BLOCK_SIZE_2D - 1) / BLOCK_SIZE_2D,
+		(cam.resolution.y + BLOCK_SIZE_2D - 1) / BLOCK_SIZE_2D);
+
+
+	// 1D block for path tracing
+	const int blockSize1d = BLOCK_SIZE_1D;
+
+	int depth = 0;
+
+	// --- PathSegment Tracing Stage ---
+	// Shoot ray into scene, bounce between objects, push shading chunks
+
+	bool iterationComplete = false;
+
+	dim3 numblocksPathSegmentTracing = (pixelcount + blockSize1d - 1) / blockSize1d;
+
+	// gen ray
+	thrust::default_random_engine rng = makeSeededRandomEngine(iter, iter, iter);
+	thrust::uniform_real_distribution<float> upixel(0.0, 1.0f);
+
+	float jitterX = upixel(rng);
+	float jitterY = upixel(rng);
+
+	// TODO: when camera is initialized, set the camera medium
+	// Transfer camera medium to ray medium in this function
+	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> > (cam,
+		iter, traceDepth, jitterX, jitterY, dev_paths);
+
+	while (!iterationComplete) {
+		// TODO: update Geom, Tri, Intersection, and maybe Light struct to hold Medium Interface
+		// When intersecting with primitive, determine if there is a medium transition or not
+		// Update isect struct's mediumInterface member variable with the appropriate mediumInterface
+		computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
+			depth
+			, pixelcount
+			, dev_paths
+			, dev_geoms
+			, hst_scene->geoms.size()
+			, dev_tris
+			, hst_scene->num_tris
+			, dev_intersections
+			, dev_bvh_nodes
+			);
+
+		depth++;
+
+		// Attenuating ray throughput with medium stuff (phase function)
+		// Check if throughput is black, and break out of loop (set remainingBounces to 0)
+		//sampleParticipatingMedium << < >> > ();
+
+		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distributino
+		// Else, handle surface interaction
+		//handleInteractions << < >> > ();
 
 		// RUSSIAN ROULETTE
 		if (depth >= 5) {
