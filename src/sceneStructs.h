@@ -14,9 +14,6 @@
 
 // Represents a homogeneous medium
 struct HomogeneousMedium {
-    //__host__ __device__ HomogeneousMedium() : sigma_a(glm::vec3(0.0)), sigma_s(glm::vec3(0.0)), sigma_t(glm::vec3(0.0)), g(0.0) {}
-    //__host__ __device__ HomogeneousMedium(const glm::vec3& sigma_a, const glm::vec3& sigma_s, float g)
-    //    : sigma_a(sigma_a), sigma_s(sigma_s), sigma_t(sigma_s + sigma_a), g(g) {}
     glm::vec3 sigma_a; // Absorption coefficient
     glm::vec3 sigma_s; // Scattering coefficient
     glm::vec3 sigma_t; // Extinction
@@ -24,18 +21,15 @@ struct HomogeneousMedium {
 };
 
 struct MediumInteraction {
-    glm::vec3 samplePoint;
-    glm::vec3 wo;
-    int medium;
+    glm::vec3 samplePoint;  // Point between ray origin and surface interaction
+    glm::vec3 wo;           // Outgoing ray direction
+    int medium;             // Pointer to medium
 };
 
 // Represents possible transition between two mediums
-struct MediumInterface {
-    //__host__ __device__ MediumInterface() : inside(-1), outside(-1) {}
-    //__host__ __device__ MediumInterface(const int medium) : inside(medium), outside(medium) {}
-    //__host__ __device__ MediumInterface(const int inside, const int outside) : inside(inside), outside(outside) {}   
-    int inside;
-    int outside;
+struct MediumInterface {  
+    int inside;        // Index to medium on inside
+    int outside;       // Index to medium on outside
 };
 
 // SCENE STRUCTS

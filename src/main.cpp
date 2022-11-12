@@ -5,8 +5,8 @@
 #include "preview.h"
 #include <cstring>
 
-#define PATH_INTEGRATOR
-//#define VOLUME_INTEGRATOR
+//#define PATH_INTEGRATOR
+#define VOLUME_INTEGRATOR
 
 static std::string startTimeString;
 
