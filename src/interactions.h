@@ -7,6 +7,23 @@
 //#define USE_SCHLICK_APPROX
 
 // CHECKITOUT
+
+inline __host__ __device__ 
+void buildOrthonormalBasis(const glm::vec3& normal, glm::vec3* tangent, glm::vec3* bitangent) {
+    if (glm::abs(normal.x) > glm::abs(normal.y))
+        *tangent = glm::vec3(-normal.z, 0, normal.x) /
+        glm::sqrt(normal.x * normal.x + normal.z * normal.z);
+    else
+        *tangent = glm::vec3(0, normal.z, -normal.y) /
+        glm::sqrt(normal.y * normal.y + normal.z * normal.z);
+    *bitangent = glm::cross(normal, *tangent);
+}
+
+inline __host__ __device__
+glm::vec3 convertToSphericalDirection(float sinTheta, float cosTheta, float phi, const glm::vec3 &x, const glm::vec3& y, const glm::vec3& z) {
+    return sinTheta * glm::cos(phi) * x + sinTheta * glm::sin(phi) * y + cosTheta * z;
+}
+
 /**
  * Computes a cosine-weighted random direction in a hemisphere.
  * Used for diffuse lighting.
@@ -99,6 +116,82 @@ inline __device__ glm::vec3 fresnelDielectric(float cos_theta_i, float etaT) {
     float Rperp = ((eta_i_cos_theta_i) - (eta_t_cos_theta_t)) / ((eta_i_cos_theta_i) + (eta_t_cos_theta_t));
     return glm::vec3((Rparl * Rparl + Rperp * Rperp) / 2.0f);
 #endif
+}
+
+inline __host__ __device__
+float evaluatePhaseHG(const glm::vec3& wo, const glm::vec3& wi, float g)
+{
+    float cosTheta = glm::dot(wo, wi);
+    float denom = 1 + g * g + 2 * g * cosTheta;
+    return INV_FOUR_PI * (1 - g * g) / (denom * glm::sqrt(denom));
+}
+
+inline __host__ __device__
+float Sample_p(const glm::vec3& wo, glm::vec3* wi, const glm::vec2& u, float g)
+{
+    // cosTheta for Henyey-Greenstein
+    float cosTheta;
+    if (glm::abs(g) < 0.0001) {
+        cosTheta = 1 * 2 * u[0];
+    }
+    else {
+        float sqrTerm = (1 - g * g) / (1 - g + 2 * g * u[0]);
+        cosTheta = (1 + g * g - sqrTerm * sqrTerm) / (2 * g);
+    }
+
+    // Compute wi
+    float sinTheta = glm::sqrt(glm::max(0.f, 1 - cosTheta * cosTheta));
+    float phi = 2 * PI * u[1];
+
+    // Create orthonormal basis
+    glm::vec3 v1, v2;
+    buildOrthonormalBasis(wo, &v1, &v2);
+    *wi = convertToSphericalDirection(sinTheta, cosTheta, phi, v1, v2, wo);
+
+    return evaluatePhaseHG(wo, *wi, g);
+}
+
+inline __host__ __device__ glm::vec3 Tr_homogeneous(const HomogeneousMedium& medium, const Ray& ray)
+{
+    return glm::vec3(0.0, 0.0, 0.0);
+}
+
+inline __host__ __device__
+glm::vec3 Sample_homogeneous(
+    const HomogeneousMedium& medium, 
+    const PathSegment& segment, 
+    const ShadeableIntersection& isect, 
+    MediumInteraction* mi, 
+    int mediumIndex, 
+    float rand)
+{
+    const Ray& ray = segment.ray;
+
+    // TODO: change this to randomly select channel with spectral rendering
+    int channel = 0;
+    float dist = -glm::log(1 - rand) / medium.sigma_t[channel];
+    float t = glm::min(dist * glm::length(ray.direction), isect.t);
+    bool sampleMedium = t < isect.t;
+    if (sampleMedium) {
+        glm::vec3 samplePoint = ray.origin + t * ray.direction;
+        mi->samplePoint = samplePoint;
+        mi->wo = -ray.direction;
+        mi->medium = mediumIndex;
+    }
+
+    // Compute transmittance and sample density
+    glm::vec3 Tr = glm::exp(-medium.sigma_t * glm::min(t, MAX_FLOAT) * glm::length(ray.direction));
+
+    // Return scattering weighting factor
+    glm::vec3 density = sampleMedium ? (medium.sigma_t * Tr) : Tr;
+    float pdf = 0;
+
+    return glm::vec3(0.0, 0.0, 0.0);
+}
+
+inline __host__ __device__ bool IsMediumTransition(const MediumInterface& mi)
+{ 
+    return mi.inside != mi.outside; 
 }
 
 

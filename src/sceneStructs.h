@@ -8,6 +8,37 @@
 #include <thrust/random.h>
 
 #define BACKGROUND_COLOR (glm::vec3(0.0f))
+#define MAX_FLOAT 1000000000.0f
+
+// VOLUME STRUCTS
+
+// Represents a homogeneous medium
+struct HomogeneousMedium {
+    //__host__ __device__ HomogeneousMedium() : sigma_a(glm::vec3(0.0)), sigma_s(glm::vec3(0.0)), sigma_t(glm::vec3(0.0)), g(0.0) {}
+    //__host__ __device__ HomogeneousMedium(const glm::vec3& sigma_a, const glm::vec3& sigma_s, float g)
+    //    : sigma_a(sigma_a), sigma_s(sigma_s), sigma_t(sigma_s + sigma_a), g(g) {}
+    glm::vec3 sigma_a; // Absorption coefficient
+    glm::vec3 sigma_s; // Scattering coefficient
+    glm::vec3 sigma_t; // Extinction
+    float g;           // Asymmetry factor for Henyey-Greenstein
+};
+
+struct MediumInteraction {
+    glm::vec3 samplePoint;
+    glm::vec3 wo;
+    int medium;
+};
+
+// Represents possible transition between two mediums
+struct MediumInterface {
+    //__host__ __device__ MediumInterface() : inside(-1), outside(-1) {}
+    //__host__ __device__ MediumInterface(const int medium) : inside(medium), outside(medium) {}
+    //__host__ __device__ MediumInterface(const int inside, const int outside) : inside(inside), outside(outside) {}   
+    int inside;
+    int outside;
+};
+
+// SCENE STRUCTS
 
 enum GeomType {
     SPHERE,
@@ -72,6 +103,7 @@ struct Tri {
     glm::vec3 plane_normal;
     float S;
     int mat_ID;
+    MediumInterface mediumInterface;
 };
 
 struct Geom {
@@ -83,6 +115,7 @@ struct Geom {
     glm::mat4 transform;
     glm::mat4 inverseTransform;
     glm::mat4 invTranspose;
+    MediumInterface mediumInterface;
 };
 
 struct Light {
@@ -125,6 +158,7 @@ struct PathSegment {
     glm::vec3 rayThroughput;
     thrust::default_random_engine rng_engine;
     int remainingBounces;
+    int medium;
     bool prev_hit_was_specular;
 };
 
@@ -147,4 +181,7 @@ struct ShadeableIntersection {
   float t;
   glm::vec3 surfaceNormal;
   int materialId;
+  MediumInterface mediumInterface;
 };
+
+

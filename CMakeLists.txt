@@ -76,7 +76,7 @@ set(headers
     src/tiny_obj_loader.h
     src/ImGui/imconfig.h
     src/lbvh.h
-    src/volumeStructs.h
+    src/volpathtrace.h
 	
 	src/ImGui/imgui.h
     src/ImGui/imconfig.h
@@ -99,6 +99,7 @@ set(sources
     src/preview.cpp
     src/utilities.cpp
     src/lbvh.cu
+    src/volpathtrace.cu
 	
     src/ImGui/imgui.cpp 
       src/ImGui/imgui_demo.cpp 

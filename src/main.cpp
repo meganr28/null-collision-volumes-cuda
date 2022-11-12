@@ -5,6 +5,8 @@
 #include "preview.h"
 #include <cstring>
 
+#define PATH_INTEGRATOR
+//#define VOLUME_INTEGRATOR
 
 static std::string startTimeString;
 
@@ -139,8 +141,14 @@ void runCuda() {
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
 	if (iteration == 0) {
+#ifdef PATH_INTEGRATOR
 		pathtraceFree();
 		pathtraceInit(scene);
+#endif
+#ifdef VOLUME_INTEGRATOR
+		volPathtraceFree();
+		volPathtraceInit(scene);
+#endif
 	}
 
 	if (iteration < renderState->iterations) {
@@ -150,8 +158,12 @@ void runCuda() {
 
 		// execute the kernel
 		int frame = 0;
+#ifdef PATH_INTEGRATOR
 		pathtrace(pbo_dptr, frame, iteration);
-
+#endif
+#ifdef VOLUME_INTEGRATOR
+		volPathtrace(pbo_dptr, frame, iteration);
+#endif
 		// unmap buffer object
 		cudaGLUnmapBufferObject(pbo);
 	}

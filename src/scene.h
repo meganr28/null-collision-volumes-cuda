@@ -7,7 +7,6 @@
 #include "glm/glm.hpp"
 #include "utilities.h"
 #include "sceneStructs.h"
-#include "volumeStructs.h"
 
 using namespace std;
 
