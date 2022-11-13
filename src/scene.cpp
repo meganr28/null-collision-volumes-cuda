@@ -188,9 +188,6 @@ int Scene::loadGeom(string objectid) {
 
                         tri_bounds.push_back(newTriBounds);
 
-                        newTri.mediumInterface.inside = -1;
-                        newTri.mediumInterface.outside = -1;
-
                         mesh_tris.push_back(newTri);
                         num_tris++;
                     }
@@ -214,7 +211,21 @@ int Scene::loadGeom(string objectid) {
                 mesh_tris[i].mat_ID = newGeom.materialid;
             }
         }
-        
+
+        //link medium interface
+        utilityCore::safeGetline(fp_in, line);
+        if (!line.empty() && fp_in.good()) {
+            vector<string> tokens = utilityCore::tokenizeString(line);
+            newGeom.mediumInterface.inside = atoi(tokens[1].c_str());
+            newGeom.mediumInterface.outside = atoi(tokens[2].c_str());
+            cout << "Connecting Geom " << objectid << " to Medium Interface " << newGeom.mediumInterface.inside << " " << newGeom.mediumInterface.outside << "..." << endl;
+        }
+
+        if (newGeom.type == MESH) {
+            for (int i = starting_tri_size; i < ending_tri_size; ++i) {
+                mesh_tris[i].mediumInterface = newGeom.mediumInterface;
+            }
+        }
 
         //load transformations
         utilityCore::safeGetline(fp_in, line);
@@ -238,9 +249,6 @@ int Scene::loadGeom(string objectid) {
         newGeom.inverseTransform = glm::inverse(newGeom.transform);
         newGeom.invTranspose = glm::inverseTranspose(newGeom.transform);
 
-        newGeom.mediumInterface.inside = -1;
-        newGeom.mediumInterface.outside = -1;
-
         if (newGeom.type != MESH) {
             geoms.push_back(newGeom);
             if (materials[newGeom.materialid].emittance > 0.0f) {
@@ -249,8 +257,6 @@ int Scene::loadGeom(string objectid) {
                 lights.push_back(newLight);
             }
         }
-
-        
 
         return 1;
     }
