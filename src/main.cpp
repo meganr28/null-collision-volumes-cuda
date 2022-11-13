@@ -86,7 +86,12 @@ int main(int argc, char** argv) {
 
 	// Initialize ImGui Data
 	InitImguiData(guiData);
+#ifdef PATH_INTEGRATOR
 	InitDataContainer(guiData);
+#endif
+#ifdef VOLUME_INTEGRATOR
+	InitDataContainer_Vol(guiData);
+#endif
 
 	// GLFW main loop
 	mainLoop();
