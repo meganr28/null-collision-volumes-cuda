@@ -161,11 +161,14 @@ struct MISLightRay {
     glm::vec3 f;
     float pdf;
     int light_ID;
+    int medium;
 };
 
 struct MISLightIntersection {
     glm::vec3 LTE;
     float w;
+    MediumInterface mediumInterface;
+    MediumInteraction mi;
 };
 
 // Use with a corresponding PathSegment to do:
@@ -176,6 +179,7 @@ struct ShadeableIntersection {
   glm::vec3 surfaceNormal;
   int materialId;
   MediumInterface mediumInterface;
+  MediumInteraction mi;
 };
 
 

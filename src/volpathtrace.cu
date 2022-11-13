@@ -308,6 +308,17 @@ __global__ void computeIntersections_Vol(
 								isect.t = t;
 								isect.materialId = tri.mat_ID;
 								isect.surfaceNormal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
+
+								// Check if surface is medium transition
+								if (IsMediumTransition(tri.mediumInterface)) {
+									isect.mediumInterface = tri.mediumInterface;
+								}
+								else {
+									MediumInterface mediumInterface;
+									mediumInterface.inside = pathSegments[path_index].medium;
+									mediumInterface.outside = pathSegments[path_index].medium;
+									isect.mediumInterface = mediumInterface;
+								}
 							}
 						}
 						// if last node in tree, we are done
@@ -406,33 +417,35 @@ __global__ void sampleParticipatingMedium(
 		}
 
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
-		thrust::uniform_real_distribution<float> u01(0, 1);
+		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 
 		int rayMediumIndex = pathSegments[idx].medium;
 		MediumInteraction mi;
+		mi.medium = -1;
 		if (rayMediumIndex >= 0) {
 			pathSegments[idx].rayThroughput *= Sample_homogeneous(homoMedia[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
 		}
-		if (glm::length(pathSegments[idx].rayThroughput) == 0) {
+		if (glm::length(pathSegments[idx].rayThroughput) == 0.0f) {
 			pathSegments[idx].remainingBounces = 0;
 		}
+		intersections[idx].mi = mi;
+
 	}
 }
 
-__global__ void genMISRaysKernel_Vol(
-	int iter
-	, int num_paths
-	, int max_depth
-	, ShadeableIntersection* shadeableIntersections
-	, PathSegment* pathSegments
-	, Material* materials
-	, MISLightRay* direct_light_rays
-	, MISLightRay* bsdf_light_rays
-	, Light* lights
-	, int num_lights
-	, Geom* geoms
-	, MISLightIntersection* direct_light_isects
-	, MISLightIntersection* bsdf_light_isects
+// kernel to handle interactions within a medium (instead of surface)
+__global__ void generateMediumDirectLightSample(
+	int num_paths,
+	int max_depth,
+	PathSegment* pathSegments,
+	Material* materials,
+	ShadeableIntersection* intersections,
+	HomogeneousMedium* homoMedia,
+	MISLightRay* direct_light_rays,
+	MISLightIntersection* direct_light_isects,
+	Light* lights,
+	int num_lights,
+	Geom* geoms
 )
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -441,10 +454,78 @@ __global__ void genMISRaysKernel_Vol(
 		if (pathSegments[idx].remainingBounces == 0) {
 			return;
 		}
+		if (intersections[idx].mi.medium == -1) {
+			return;
+		}
 
-		ShadeableIntersection intersection = shadeableIntersections[idx];
+		ShadeableIntersection intersection = intersections[idx];
 		Material material = materials[intersection.materialId];
+
+		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
+		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
+
+		// TODO: Check surface intersection bsdf doesn't exist
+		computeDirectLightSamplePreVis(
+			idx,
+			pathSegments,
+			material,
+			materials,
+			intersection,
+			homoMedia,
+			direct_light_rays,
+			direct_light_isects,
+			lights,
+			num_lights,
+			geoms,
+			rng,
+			u01);
 		
+		/*pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput; // TODO: * uniform sample one light;
+		glm::vec3 wo = -pathSegments[idx].ray.direction;
+		glm::vec3 wi;
+		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), homoMedia[pathSegments[idx].medium].g);
+		
+
+		// Create new ray
+		pathSegments[idx].ray.direction = wi;
+		pathSegments[idx].ray.direction_inv = 1.0f / wi;
+		pathSegments[idx].ray.origin = intersections[idx].mi.samplePoint + (wi * 0.001f);
+		// TRY: Assert(mediumInterface.inside == mediumInterface.outside);
+		//pathSegments[idx].medium = pathSegments[idx].medium;
+		pathSegments[idx].remainingBounces--;*/
+		
+	}
+
+}
+
+// kernel to handle interactions within a surface (instead of medium)
+__global__ void generateSurfaceDirectLightSample(
+	int num_paths,
+	int max_depth,
+	PathSegment* pathSegments,
+	Material* materials,
+	ShadeableIntersection* intersections,
+	HomogeneousMedium* homoMedia,
+	MISLightRay* direct_light_rays,
+	MISLightIntersection* direct_light_isects,
+	Light* lights,
+	int num_lights,
+	Geom* geoms
+)
+{
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx < num_paths)
+	{
+		if (pathSegments[idx].remainingBounces == 0) {
+			return;
+		}
+		if (intersections[idx].mi.medium >= 0) {
+			return;
+		}
+
+		ShadeableIntersection intersection = intersections[idx];
+		Material material = materials[intersection.materialId];
+
 		if (material.emittance > 0.0f) {
 			if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
 				// only color lights on first hit
@@ -460,213 +541,34 @@ __global__ void genMISRaysKernel_Vol(
 			return;
 		}
 
-		glm::vec3 intersect_point = pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction;
-
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
-		thrust::uniform_real_distribution<float> u01(0, 1);
+		thrust::uniform_real_distribution<float> u01(0.0, 1.0);
 
-		// choose light to directly sample
-		direct_light_rays[idx].light_ID = bsdf_light_rays[idx].light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)num_lights)), num_lights - 1)].geom_ID;
 
-		Geom& light = geoms[direct_light_rays[idx].light_ID];
+		// TODO: Check surface intersection bsdf doesn't exist
+		computeDirectLightSamplePreVis(
+			idx,
+			pathSegments,
+			material,
+			materials,
+			intersection,
+			homoMedia,
+			direct_light_rays,
+			direct_light_isects,
+			lights,
+			num_lights,
+			geoms,
+			rng,
+			u01);
 
-		Material& light_material = materials[light.materialid];
-
-		////////////////////////////////////////////////////
-		// LIGHT SAMPLED
-		////////////////////////////////////////////////////
-
-		// generate light sampled wi
-		glm::vec3 wi = glm::vec3(0.0f);
-		float absDot = 0.0f;
-		glm::vec3 f = glm::vec3(0.0f);
-		float pdf_L = 0.0f;
-		float pdf_B = 0.0f;
-
-		if (light.type == SQUAREPLANE) {
-			glm::vec2 p_obj_space = glm::vec2(u01(rng) - 0.5f, u01(rng) - 0.5f);
-			glm::vec3 p_world_space = glm::vec3(light.transform * glm::vec4(p_obj_space.x, p_obj_space.y, 0.0f, 1.0f));
-			wi = glm::normalize(glm::vec3(p_world_space - intersect_point));
-			absDot = glm::dot(wi, glm::normalize(glm::vec3(light.invTranspose * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f))));
-			
-			if (absDot < 0.0001f) {
-				absDot = glm::abs(absDot);
-				// pdf of square plane light = distanceSq / (absDot * lightArea)
-				float dist = glm::length(p_world_space - intersect_point);
-				if (absDot > 0.0001f) {
-					pdf_L = (dist * dist) / (absDot * light.scale.x * light.scale.y);
-				}
-			}
-			else {
-				pdf_L = 0.0f;
-			}
-		}
-
-		direct_light_rays[idx].ray.origin = intersect_point + (wi * 0.001f);
-		direct_light_rays[idx].ray.direction = wi;
-		direct_light_rays[idx].ray.direction_inv = 1.0f / wi;
 		
 
-		absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-		// generate f, pdf, absdot from light sampled wi
-		if (material.type == SPEC_BRDF) {
-			// spec refl
-			direct_light_rays[idx].f = glm::vec3(0.0f);
-		}
-		else if (material.type == SPEC_BTDF) {
-			// spec refr
-			direct_light_rays[idx].f = glm::vec3(0.0f);
-		}
-		else if (material.type == SPEC_GLASS) {
-			// spec glass
-			direct_light_rays[idx].f = glm::vec3(0.0f);
-		}
-		else {
-			pdf_B = absDot * 0.31831f;
-			f = material.R * 0.31831f; // INV_PI
-			 
-		}
-		direct_light_rays[idx].f = f;
-		direct_light_rays[idx].pdf = pdf_B;
-
-		// LTE = f * Li * absDot / pdf
-		if (pdf_L <= 0.0001f) {
-			direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-		}
-		else {
-			direct_light_isects[idx].LTE = light_material.emittance * light_material.R * f * absDot / pdf_L;
-
-		}
-
-		// MIS Power Heuristic
-		if (pdf_L <= 0.0001f && pdf_B <= 0.0001f) {
-			direct_light_isects[idx].w = 0.0f;
-		}
-		else {
-			direct_light_isects[idx].w = (pdf_L * pdf_L) / ((pdf_L * pdf_L) + (pdf_B * pdf_B));
-		}
-
-
-		////////////////////////////////////////////////////
-		// BSDF SAMPLED
-		////////////////////////////////////////////////////
-
-		if (material.type == SPEC_BRDF) {
-			// spec refl
-			wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf_B = 1.0f;
-			if (absDot == 0.0f) {
-				f = material.R;
-			}
-			else {
-				f = material.R / absDot;
-			}
-		}
-		else if (material.type == SPEC_BTDF) {
-			// spec refr
-			float eta = material.ior;
-			if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
-				// outside
-				eta = 1.0f / eta;
-				wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-			}
-			else {
-				// inside
-				wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf_B = 1.0f;
-			if (glm::length(wi) <= 0.0001f) {
-				// total internal reflection
-				f = glm::vec3(0.0f);
-			}
-			if (absDot == 0.0f) {
-				f = material.T;
-			}
-			else {
-				f = material.T / absDot;
-			}
-		}
-		else if (material.type == SPEC_GLASS) {
-			// spec glass
-			float eta = material.ior;
-			if (u01(rng) < 0.5f) {
-				// spec refl
-				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf_B = 1.0f;
-				if (absDot == 0.0f) {
-					f = material.R;
-				}
-				else {
-					f = material.R / absDot;
-				}
-				f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), material.ior);
-			}
-			else {
-				// spec refr
-				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
-					// outside
-					eta = 1.0f / eta;
-					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-				}
-				else {
-					// inside
-					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-				}
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf_B = 1.0f;
-				if (glm::length(wi) <= 0.0001f) {
-					// total internal reflection
-					f = glm::vec3(0.0f);
-				}
-				else if (absDot == 0.0f) {
-					f = material.T;
-				}
-				else {
-					f = material.T / absDot;
-				}
-				f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), material.ior);
-			}
-			f *= 2.0f;
-		}
-		else {
-			// diffuse
-			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
-			if (material.type == DIFFUSE_BTDF) {
-				wi = -wi;
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf_B = absDot * 0.31831f;
-			f = material.R * 0.31831f; // INV_PI
-		}
-
-
-		// Change ray direction
-		bsdf_light_rays[idx].ray.origin = intersect_point + (wi * 0.001f);
-		bsdf_light_rays[idx].ray.direction = wi;
-		bsdf_light_rays[idx].ray.direction_inv = 1.0f / wi;
-		bsdf_light_rays[idx].f = f;
-
-
-		// LTE = f * Li * absDot / pdf
-		absDot = glm::abs(glm::dot(intersection.surfaceNormal, bsdf_light_rays[idx].ray.direction));
-		bsdf_light_rays[idx].pdf = pdf_B;
-
-		if (pdf_B <= 0.0001f) {
-			bsdf_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-		}
-		else {
-			bsdf_light_isects[idx].LTE = light_material.emittance * light_material.R * bsdf_light_rays[idx].f * absDot / pdf_B;
-		}
-		
 	}
 }
 
-__global__ void computeDirectLightIsects_Vol(
-	int depth
-	, int num_paths
+
+__global__ void computeVisVolumetric(
+	int num_paths
 	, PathSegment* pathSegments
 	, MISLightRay* direct_light_rays
 	, Geom* geoms
@@ -675,6 +577,7 @@ __global__ void computeDirectLightIsects_Vol(
 	, int tris_size
 	, MISLightIntersection* direct_light_intersections
 	, BVHNode_GPU* bvh_nodes
+	, HomogeneousMedium* homoMedia
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -689,461 +592,177 @@ __global__ void computeDirectLightIsects_Vol(
 			return;
 		}
 
+		
 		MISLightRay r = direct_light_rays[path_index];
+		MISLightIntersection isect = direct_light_intersections[path_index];
+		
+		glm::vec3 Tr = glm::vec3(1.0f);
 
-		float t_min = MAX_INTERSECT_DIST;
-		int obj_ID = -1;
-
-
-		float t;
-
-		glm::vec3 tmp_normal;
+		while (true) {
+			// Surface Intersection
+			float t_min = MAX_INTERSECT_DIST;
+			int obj_ID = -1;
+			float t;
+			glm::vec3 tmp_normal;
 
 #ifdef ENABLE_TRIS
-		if (tris_size != 0) {
-			int stack_pointer = 0;
-			int cur_node_index = 0;
-			int node_stack[32];
-			BVHNode_GPU cur_node;
-			glm::vec3 P;
-			glm::vec3 s;
-			float t1;
-			float t2;
-			float tmin;
-			float tmax;
-			while (true) {
-				cur_node = bvh_nodes[cur_node_index];
+			if (tris_size != 0) {
+				int stack_pointer = 0;
+				int cur_node_index = 0;
+				int node_stack[32];
+				BVHNode_GPU cur_node;
+				glm::vec3 P;
+				glm::vec3 s;
+				float t1;
+				float t2;
+				float tmin;
+				float tmax;
+				while (true) {
+					cur_node = bvh_nodes[cur_node_index];
 
-				// (ray-aabb test node)
-				t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
-				t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
+					// (ray-aabb test node)
+					t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
+					t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
 
-				tmin = glm::min(t1, t2);
-				tmax = glm::max(t1, t2);
+					tmin = glm::min(t1, t2);
+					tmax = glm::max(t1, t2);
 
-				t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
-				t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
+					t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
+					t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
 
-				tmin = glm::max(tmin, glm::min(t1, t2));
-				tmax = glm::min(tmax, glm::max(t1, t2));
+					tmin = glm::max(tmin, glm::min(t1, t2));
+					tmax = glm::min(tmax, glm::max(t1, t2));
 
-				t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
-				t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
+					t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
+					t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
 
-				tmin = glm::max(tmin, glm::min(t1, t2));
-				tmax = glm::min(tmax, glm::max(t1, t2));
+					tmin = glm::max(tmin, glm::min(t1, t2));
+					tmax = glm::min(tmax, glm::max(t1, t2));
 
-				if (tmax >= tmin) {
-					// we intersected AABB
-					if (cur_node.tri_index != -1) {
-						// this is leaf node
-						// triangle intersection test
-						Tri tri = tris[cur_node.tri_index];
+					if (tmax >= tmin) {
+						// we intersected AABB
+						if (cur_node.tri_index != -1) {
+							// this is leaf node
+							// triangle intersection test
+							Tri tri = tris[cur_node.tri_index];
 
-						t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
-						if (t >= -0.0001f) {
-							P = r.ray.origin + t * r.ray.direction;
+							t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
+							if (t >= -0.0001f) {
+								P = r.ray.origin + t * r.ray.direction;
 
-							// barycentric coords
-							s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-								glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-								glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
+								// barycentric coords
+								s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
+									glm::length(glm::cross(P - tri.p2, P - tri.p0)),
+									glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
 
-							if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-								s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
-								t_min = t;
+								if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
+									s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
+									t_min = t;
+									tmp_normal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
+									// Check if surface is medium transition
+									if (IsMediumTransition(tri.mediumInterface)) {
+										isect.mediumInterface = tri.mediumInterface;
+									}
+									else {
+										isect.mediumInterface.inside = r.medium;
+										isect.mediumInterface.outside = r.medium;
+									}
+								}
 							}
+							// if last node in tree, we are done
+							if (stack_pointer == 0) {
+								break;
+							}
+							// otherwise need to check rest of the things in the stack
+							stack_pointer--;
+							cur_node_index = node_stack[stack_pointer];
 						}
-						// if last node in tree, we are done
+						else {
+							node_stack[stack_pointer] = cur_node.offset_to_second_child;
+							stack_pointer++;
+							cur_node_index++;
+						}
+					}
+					else {
+						// didn't intersect AABB, remove from stack
 						if (stack_pointer == 0) {
 							break;
 						}
-						// otherwise need to check rest of the things in the stack
 						stack_pointer--;
 						cur_node_index = node_stack[stack_pointer];
 					}
-					else {
-						node_stack[stack_pointer] = cur_node.offset_to_second_child;
-						stack_pointer++;
-						cur_node_index++;
-					}
+				}
+			}
+#endif
+
+			for (int i = 0; i < geoms_size; ++i)
+			{
+				Geom& geom = geoms[i];
+
+
+
+				if (geom.type == SPHERE) {
+#ifdef ENABLE_SPHERES
+					t = sphereIntersectionTest(geom, r.ray, tmp_normal);
+#endif
+				}
+				else if (geom.type == SQUAREPLANE) {
+#ifdef ENABLE_SQUAREPLANES
+					t = squareplaneIntersectionTest(geom, r.ray, tmp_normal);
+#endif
 				}
 				else {
-					// didn't intersect AABB, remove from stack
-					if (stack_pointer == 0) {
-						break;
+#ifdef ENABLE_RECTS
+					t = boxIntersectionTest(geom, r.ray, tmp_normal);
+#endif
+				}
+
+				if (t_min > t)
+				{
+					t_min = t;
+					obj_ID = i;
+
+					// Check if surface is medium transition
+					if (IsMediumTransition(geom.mediumInterface)) {
+						isect.mediumInterface = geom.mediumInterface;
 					}
-					stack_pointer--;
-					cur_node_index = node_stack[stack_pointer];
+					else {
+						isect.mediumInterface.inside = r.medium;
+						isect.mediumInterface.outside = r.medium;
+					}
 				}
 			}
-	}
-#endif
-
-		for (int i = 0; i < geoms_size; ++i)
-		{
-			Geom& geom = geoms[i];
 
 
-
-			if (geom.type == SPHERE) {
-#ifdef ENABLE_SPHERES
-				t = sphereIntersectionTest(geom, r.ray, tmp_normal);
-#endif
-			}
-			else if (geom.type == SQUAREPLANE) {
-#ifdef ENABLE_SQUAREPLANES
-				t = squareplaneIntersectionTest(geom, r.ray, tmp_normal);
-#endif
-			}
-			else {
-#ifdef ENABLE_RECTS
-				t = boxIntersectionTest(geom, r.ray, tmp_normal);
-#endif
+			// if intersected object is not a "invisible" bounding box, the ray is occluded
+			if (obj_ID == -1 || (obj_ID != -1 && obj_ID != r.light_ID /* TODO: && !is_bounding_box */)) {
+				direct_light_intersections[path_index].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+				return;
 			}
 
-			if (t_min > t)
-			{
-				t_min = t;
-				obj_ID = i;
+			// if the current ray has a medium, then attenuate throughput based on transmission and distance traveled
+			if (r.medium != -1) {
+				Tr *= Tr_homogeneous(homoMedia[r.medium], r.ray, t_min);
 			}
+
+			// if the intersected object IS the light source we selected, we are done
+			if (obj_ID == r.light_ID) {
+				return;
+			}
+			
+			// We encountered a bounding box/entry/exit of a volume, so we must change our medium value, update the origin, and traverse again
+			glm::vec3 old_origin = r.ray.origin;
+			r.ray.origin = old_origin + (r.ray.direction * t_min);
+			// TODO: maybe change ray direction
+
+			r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
+				isect.mediumInterface.inside;
 		}
-
-		if (obj_ID != r.light_ID) {
-			direct_light_intersections[path_index].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-			direct_light_intersections[path_index].w = 0.0f;
-		}
+		
 
 		// LTE = f * Li * absDot / pdf
 		// Already have f, Li, absDot, and pdf from when we generated ray
 		// MIS Power Heuristic already calulated in raygen
-	}
-}
-
-__global__ void computeBSDFLightIsects_Vol(
-	int depth
-	, int num_paths
-	, PathSegment* pathSegments
-	, MISLightRay* bsdf_light_rays
-	, Geom* geoms
-	, int geoms_size
-	, Tri* tris
-	, int tris_size
-	, MISLightIntersection* bsdf_light_intersections
-	, BVHNode_GPU* bvh_nodes
-)
-{
-	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (path_index < num_paths)
-	{
-
-		if (pathSegments[path_index].remainingBounces == 0) {
-			return;
-		}
-		else if (pathSegments[path_index].prev_hit_was_specular) {
-			return;
-		}
-
-		MISLightRay r = bsdf_light_rays[path_index];
-
-		float t_min = MAX_INTERSECT_DIST;
-		int obj_ID = -1;
-		float pdf_L_B = 0.0f;
-		float t;
-		glm::vec3 hit_normal;
-
-		glm::vec3 tmp_normal;
-
-#ifdef ENABLE_TRIS
-		if (tris_size != 0) {
-			int stack_pointer = 0;
-			int cur_node_index = 0;
-			int node_stack[32];
-			BVHNode_GPU cur_node;
-			glm::vec3 P;
-			glm::vec3 s;
-			float t1;
-			float t2;
-			float tmin;
-			float tmax;
-			while (true) {
-				cur_node = bvh_nodes[cur_node_index];
-
-				// (ray-aabb test node)
-				t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
-				t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
-
-				tmin = glm::min(t1, t2);
-				tmax = glm::max(t1, t2);
-
-				t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
-				t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
-
-				tmin = glm::max(tmin, glm::min(t1, t2));
-				tmax = glm::min(tmax, glm::max(t1, t2));
-
-				t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
-				t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
-
-				tmin = glm::max(tmin, glm::min(t1, t2));
-				tmax = glm::min(tmax, glm::max(t1, t2));
-
-				if (tmax >= tmin) {
-					// we intersected AABB
-					if (cur_node.tri_index != -1) {
-						// this is leaf node
-						// triangle intersection test
-						Tri tri = tris[cur_node.tri_index];
-
-						t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
-						if (t >= -0.0001f) {
-							P = r.ray.origin + t * r.ray.direction;
-
-							// barycentric coords
-							s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-								glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-								glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-							if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-								s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
-								t_min = t;
-								hit_normal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
-							}
-						}
-						// if last node in tree, we are done
-						if (stack_pointer == 0) {
-							break;
-						}
-						// otherwise need to check rest of the things in the stack
-						stack_pointer--;
-						cur_node_index = node_stack[stack_pointer];
-					}
-					else {
-						node_stack[stack_pointer] = cur_node.offset_to_second_child;
-						stack_pointer++;
-						cur_node_index++;
-					}
-				}
-				else {
-					// didn't intersect AABB, remove from stack
-					if (stack_pointer == 0) {
-						break;
-					}
-					stack_pointer--;
-					cur_node_index = node_stack[stack_pointer];
-				}
-			}
-		}
-#endif
-		
-
-		for (int i = 0; i < geoms_size; ++i)
-		{
-			Geom& geom = geoms[i];
-
-
-
-			if (geom.type == SPHERE) {
-#ifdef ENABLE_SPHERES
-				t = sphereIntersectionTest(geom, r.ray, tmp_normal);
-#endif
-			}
-			else if (geom.type == SQUAREPLANE) {
-#ifdef ENABLE_SQUAREPLANES
-				t = squareplaneIntersectionTest(geom, r.ray, tmp_normal);
-#endif
-			}
-			else {
-#ifdef ENABLE_RECTS
-			t = boxIntersectionTest(geom, r.ray, tmp_normal);
-#endif
-		}
-
-			if (t_min > t)
-			{
-				hit_normal = tmp_normal;
-				t_min = t;
-				obj_ID = i;
-			}
-		}
-
-		float absDot = glm::dot(hit_normal, r.ray.direction);
-
-		if (obj_ID == r.light_ID && absDot < 0.0f) {
-
-			absDot = glm::abs(absDot);
-			pdf_L_B = (t_min * t_min) / (absDot * geoms[obj_ID].scale.x * geoms[obj_ID].scale.y);
-
-			// LTE = f * Li * absDot / pdf
-			// Already have f, Li, and pdf from when we generated ray
-			bsdf_light_intersections[path_index].LTE *= absDot;
-
-			// MIS Power Heuristic
-			if (pdf_L_B == 0.0f && r.pdf == 0.0f) {
-				bsdf_light_intersections[path_index].w = 0.0f;
-			}
-			else {
-				bsdf_light_intersections[path_index].w = (r.pdf * r.pdf) / ((r.pdf * r.pdf) + (pdf_L_B * pdf_L_B));
-			}
-		}
-		else {
-			bsdf_light_intersections[path_index].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-			bsdf_light_intersections[path_index].w = 0.0f;
-		}
-	}
-}
-
-__global__ void shadeMaterialUberKernel_Vol(
-	int iter
-	, int num_paths
-	, ShadeableIntersection* shadeableIntersections
-	, MISLightIntersection* direct_light_isects
-	, MISLightIntersection* bsdf_light_isects
-	, int num_lights
-	, PathSegment* pathSegments
-	, Material* materials
-)
-{
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if (idx < num_paths)
-	{
-		if (pathSegments[idx].remainingBounces == 0) {
-			return;
-		}
-		ShadeableIntersection intersection = shadeableIntersections[idx];
-		MISLightIntersection direct_light_intersection = direct_light_isects[idx];
-		MISLightIntersection bsdf_light_intersection = bsdf_light_isects[idx];
-
-		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
-		thrust::uniform_real_distribution<float> u01(0.0, 1.0);
-
-		Material m = materials[intersection.materialId];
-
-		glm::vec3 intersect_point = pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction;
-
-		// Combine direct light and bsdf light samples with Power Heuristic
-		if (!pathSegments[idx].prev_hit_was_specular) {
-			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * (float)num_lights *
-				(direct_light_intersection.w * direct_light_intersection.LTE +
-					bsdf_light_intersection.w * bsdf_light_intersection.LTE);
-		}
-
-
-		// GI LTE
-		/*scatterRay(pathSegments[idx], intersect_point,
-			intersection.surfaceNormal,
-			m,
-			rng, u01);*/
-
-		glm::vec3 wi = glm::vec3(0.0f);
-		glm::vec3 f = glm::vec3(0.0f);
-		float pdf = 0.0f;
-		float absDot = 0.0f;
-
-		//thrust::uniform_real_distribution<float> u01(0, 1);
-
-		// Physically based BSDF sampling influenced by PBRT
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
-
-		if (m.type == SPEC_BRDF) {
-			wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = m.R;
-			}
-			else {
-				f = m.R / absDot;
-			}
-		}
-		else if (m.type == SPEC_BTDF) {
-			// spec refl
-			float eta = m.ior;
-			if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0001f) {
-				// outside
-				eta = 1.0f / eta;
-				wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-			}
-			else {
-				// inside
-				wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (glm::length(wi) <= 0.0001f) {
-				// total internal reflection
-				f = glm::vec3(0.0f);
-			}
-			else if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = m.T;
-			}
-			else {
-				f = m.T / absDot;
-			}
-		}
-		else if (m.type == SPEC_GLASS) {
-			// spec glass
-			float eta = m.ior;
-			if (u01(rng) < 0.5f) {
-				// spec refl
-				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (absDot == 0.0f) {
-					f = m.R;
-				}
-				else {
-					f = m.R / absDot;
-				}
-				f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
-			}
-			else {
-				// spec refr
-				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
-					// outside
-					eta = 1.0f / eta;
-					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-				}
-				else {
-					// inside
-					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-				}
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (glm::length(wi) <= 0.0001f) {
-					// total internal reflection
-					f = glm::vec3(0.0f);
-				}
-				if (absDot == 0.0f) {
-					f = m.T;
-				}
-				else {
-					f = m.T / absDot;
-				}
-				f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
-			}
-			f *= 2.0f;
-		}
-		else {
-			// diffuse
-			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
-			if (m.type == DIFFUSE_BTDF) {
-				wi = -wi;
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = absDot * 0.31831f;
-			f = m.R * 0.31831f;
-		}
-
-		pathSegments[idx].rayThroughput *= f * absDot / pdf;
-
-		// Change ray direction
-		pathSegments[idx].ray.direction = wi;
-		pathSegments[idx].ray.direction_inv = 1.0f / wi;
-		pathSegments[idx].ray.origin = intersect_point + (wi * 0.001f);
-		pathSegments[idx].remainingBounces--;
 	}
 }
 
@@ -1286,11 +905,39 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 
 		// Attenuating ray throughput with medium stuff (phase function)
 		// Check if throughput is black, and break out of loop (set remainingBounces to 0)
-		//sampleParticipatingMedium << <blocksPerGrid2d, blockSize2d>> > ();
+		sampleParticipatingMedium << <numblocksPathSegmentTracing, blockSize1d >> > (
+			pixelcount_vol,
+			dev_paths,
+			dev_intersections,
+			dev_media);
 
-		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distributino
+		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distribution
 		// Else, handle surface interaction
-		//handleInteractions << < >> > ();
+		generateMediumDirectLightSample << < numblocksPathSegmentTracing, blockSize1d >> > (
+			pixelcount_vol,
+			traceDepth,
+			dev_paths,
+			dev_materials,
+			dev_intersections,
+			dev_media,
+			dev_direct_light_rays,
+			dev_direct_light_isects,
+			dev_lights,
+			hst_scene->lights.size(),
+			dev_geoms);
+
+		generateSurfaceDirectLightSample << < numblocksPathSegmentTracing, blockSize1d >> > (
+			pixelcount_vol,
+			traceDepth,
+			dev_paths,
+			dev_materials,
+			dev_intersections,
+			dev_media,
+			dev_direct_light_rays,
+			dev_direct_light_isects,
+			dev_lights,
+			hst_scene->lights.size(),
+			dev_geoms);
 
 		// RUSSIAN ROULETTE
 		if (depth >= 5) {

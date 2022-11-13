@@ -151,9 +151,9 @@ float Sample_p(const glm::vec3& wo, glm::vec3* wi, const glm::vec2& u, float g)
     return evaluatePhaseHG(wo, *wi, g);
 }
 
-inline __host__ __device__ glm::vec3 Tr_homogeneous(const HomogeneousMedium& medium, const Ray& ray)
+inline __host__ __device__ glm::vec3 Tr_homogeneous(const HomogeneousMedium& medium, const Ray& ray, float t)
 {
-    return glm::vec3(0.0, 0.0, 0.0);
+    return glm::exp(-medium.sigma_t * glm::min(t * glm::length(ray.direction), MAX_FLOAT));
 }
 
 inline __host__ __device__
@@ -184,14 +184,105 @@ glm::vec3 Sample_homogeneous(
 
     // Return scattering weighting factor
     glm::vec3 density = sampleMedium ? (medium.sigma_t * Tr) : Tr;
-    float pdf = 0;
+    // TODO: change this to account for pdfs of other spectral wavelengths...
+    float pdf = density[0];
 
-    return glm::vec3(0.0, 0.0, 0.0);
+    return sampleMedium ? (Tr * medium.sigma_s / pdf) : (Tr / pdf);
 }
 
 inline __host__ __device__ bool IsMediumTransition(const MediumInterface& mi)
 { 
     return mi.inside != mi.outside; 
+}
+
+
+// function to randomly choose a light, randomly choose point on light, compute LTE with that random point, and generate ray for shadow casting
+inline __host__ __device__
+glm::vec3 computeDirectLightSamplePreVis(
+    int idx,
+    PathSegment* pathSegments,
+    Material& material,
+    Material* materials,
+    ShadeableIntersection &intersection,
+    HomogeneousMedium* homoMedia,
+    MISLightRay* direct_light_rays,
+    MISLightIntersection* direct_light_isects,
+    Light* lights,
+    int num_lights,
+    Geom* geoms,
+    thrust::default_random_engine& rng, 
+    thrust::uniform_real_distribution<float>& u01) {
+
+    ////////////////////////////////////////////////////
+    // LIGHT SAMPLED
+    ////////////////////////////////////////////////////
+
+    glm::vec3 intersect_point = pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction;
+
+    // choose light to directly sample
+    direct_light_rays[idx].light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)num_lights)), num_lights - 1)].geom_ID;
+
+    Geom& light = geoms[direct_light_rays[idx].light_ID];
+
+    Material& light_material = materials[light.materialid];
+
+    // generate light sampled wi
+    glm::vec3 wi = glm::vec3(0.0f);
+    float absDot = 0.0f;
+    glm::vec3 f = glm::vec3(0.0f);
+    float pdf_L = 0.0f;
+
+    if (light.type == SQUAREPLANE) {
+        glm::vec2 p_obj_space = glm::vec2(u01(rng) - 0.5f, u01(rng) - 0.5f);
+        glm::vec3 p_world_space = glm::vec3(light.transform * glm::vec4(p_obj_space.x, p_obj_space.y, 0.0f, 1.0f));
+        wi = glm::normalize(glm::vec3(p_world_space - intersect_point));
+        absDot = glm::dot(wi, glm::normalize(glm::vec3(light.invTranspose * glm::vec4(0.0f, 0.0f, 1.0f, 0.0f))));
+
+        if (absDot < 0.0001f) {
+            absDot = glm::abs(absDot);
+            // pdf of square plane light = distanceSq / (absDot * lightArea)
+            float dist = glm::length(p_world_space - intersect_point);
+            if (absDot > 0.0001f) {
+                pdf_L = (dist * dist) / (absDot * light.scale.x * light.scale.y);
+            }
+        }
+        else {
+            pdf_L = 0.0f;
+        }
+    }
+
+    direct_light_rays[idx].ray.origin = intersect_point + (wi * 0.001f);
+    direct_light_rays[idx].ray.direction = wi;
+    direct_light_rays[idx].ray.direction_inv = 1.0f / wi;
+    direct_light_rays[idx].medium = intersection.mi.medium;
+
+    absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+    // generate f, pdf, absdot from light sampled wi
+    if (material.type == SPEC_BRDF) {
+        // spec refl
+        direct_light_rays[idx].f = glm::vec3(0.0f);
+    }
+    else if (material.type == SPEC_BTDF) {
+        // spec refr
+        direct_light_rays[idx].f = glm::vec3(0.0f);
+    }
+    else if (material.type == SPEC_GLASS) {
+        // spec glass
+        direct_light_rays[idx].f = glm::vec3(0.0f);
+    }
+    else {
+        direct_light_rays[idx].f = material.R * 0.31831f; // INV_PI
+
+    }
+
+    // LTE = f * Li * absDot / pdf
+    if (pdf_L <= 0.0001f) {
+        direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+    }
+    else {
+        direct_light_isects[idx].LTE = light_material.emittance * light_material.R * f * absDot / pdf_L;
+
+    }
 }
 
 
