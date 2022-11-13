@@ -480,19 +480,7 @@ __global__ void generateMediumDirectLightSample(
 			rng,
 			u01);
 		
-		/*pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput; // TODO: * uniform sample one light;
-		glm::vec3 wo = -pathSegments[idx].ray.direction;
-		glm::vec3 wi;
-		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), homoMedia[pathSegments[idx].medium].g);
-		
 
-		// Create new ray
-		pathSegments[idx].ray.direction = wi;
-		pathSegments[idx].ray.direction_inv = 1.0f / wi;
-		pathSegments[idx].ray.origin = intersections[idx].mi.samplePoint + (wi * 0.001f);
-		// TRY: Assert(mediumInterface.inside == mediumInterface.outside);
-		//pathSegments[idx].medium = pathSegments[idx].medium;
-		pathSegments[idx].remainingBounces--;*/
 		
 	}
 
@@ -747,6 +735,7 @@ __global__ void computeVisVolumetric(
 
 			// if the intersected object IS the light source we selected, we are done
 			if (obj_ID == r.light_ID) {
+				direct_light_intersections[path_index].LTE *= Tr;
 				return;
 			}
 			
@@ -759,11 +748,201 @@ __global__ void computeVisVolumetric(
 				isect.mediumInterface.inside;
 		}
 		
-
 		// LTE = f * Li * absDot / pdf
 		// Already have f, Li, absDot, and pdf from when we generated ray
 		// MIS Power Heuristic already calulated in raygen
 	}
+}
+
+__global__ void mediumSpawnPathSegment(
+	int iter
+	, int num_paths
+	, ShadeableIntersection* intersections
+	, MISLightIntersection* direct_light_isects
+	, int num_lights
+	, PathSegment* pathSegments
+	, Material* materials
+	, HomogeneousMedium* homoMedia) {
+
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx < num_paths)
+	{
+		if (pathSegments[idx].remainingBounces == 0) {
+			return;
+		}
+		if (intersections[idx].mi.medium == -1) {
+			return;
+		}
+
+		ShadeableIntersection intersection = intersections[idx];
+
+		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
+		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
+
+
+		pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
+		glm::vec3 wo = -pathSegments[idx].ray.direction;
+		glm::vec3 wi;
+		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), homoMedia[pathSegments[idx].medium].g);
+
+
+		// Create new ray
+		pathSegments[idx].ray.direction = wi;
+		pathSegments[idx].ray.direction_inv = 1.0f / wi;
+		pathSegments[idx].ray.origin = intersections[idx].mi.samplePoint + (wi * 0.001f);
+		pathSegments[idx].medium = 
+		// TRY: Assert(mediumInterface.inside == mediumInterface.outside);
+		//pathSegments[idx].medium = pathSegments[idx].medium;
+		pathSegments[idx].medium = intersection.mi.medium;
+		pathSegments[idx].remainingBounces--;
+	}
+
+}
+
+__global__ void surfaceSpawnPathSegment(
+	int iter
+	, int num_paths
+	, ShadeableIntersection* intersections
+	, MISLightIntersection* direct_light_isects
+	, int num_lights
+	, PathSegment* pathSegments
+	, Material* materials
+	, HomogeneousMedium* homoMedia) {
+
+	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx < num_paths)
+	{
+		if (pathSegments[idx].remainingBounces == 0) {
+			return;
+		}
+		if (intersections[idx].mi.medium >= 0) {
+			return;
+		}
+
+		ShadeableIntersection intersection = intersections[idx];
+		MISLightIntersection direct_light_intersection = direct_light_isects[idx];
+
+		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
+		thrust::uniform_real_distribution<float> u01(0.0, 1.0);
+
+		Material m = materials[intersection.materialId];
+
+		glm::vec3 intersect_point = pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction;
+
+		if (!pathSegments[idx].prev_hit_was_specular) {
+			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
+		}
+		glm::vec3 wi = glm::vec3(0.0f);
+		glm::vec3 f = glm::vec3(0.0f);
+		float pdf = 0.0f;
+		float absDot = 0.0f;
+
+		//thrust::uniform_real_distribution<float> u01(0, 1);
+
+		// Physically based BSDF sampling influenced by PBRT
+		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
+		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
+
+		if (m.type == SPEC_BRDF) {
+			wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
+			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+			pdf = 1.0f;
+			if (absDot >= -0.0001f && absDot <= -0.0001f) {
+				f = m.R;
+			}
+			else {
+				f = m.R / absDot;
+			}
+		}
+		else if (m.type == SPEC_BTDF) {
+			// spec refl
+			float eta = m.ior;
+			if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0001f) {
+				// outside
+				eta = 1.0f / eta;
+				wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
+			}
+			else {
+				// inside
+				wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
+			}
+			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+			pdf = 1.0f;
+			if (glm::length(wi) <= 0.0001f) {
+				// total internal reflection
+				f = glm::vec3(0.0f);
+			}
+			else if (absDot >= -0.0001f && absDot <= -0.0001f) {
+				f = m.T;
+			}
+			else {
+				f = m.T / absDot;
+			}
+		}
+		else if (m.type == SPEC_GLASS) {
+			// spec glass
+			float eta = m.ior;
+			if (u01(rng) < 0.5f) {
+				// spec refl
+				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
+				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+				pdf = 1.0f;
+				if (absDot == 0.0f) {
+					f = m.R;
+				}
+				else {
+					f = m.R / absDot;
+				}
+				f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
+			}
+			else {
+				// spec refr
+				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
+					// outside
+					eta = 1.0f / eta;
+					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
+				}
+				else {
+					// inside
+					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
+				}
+				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+				pdf = 1.0f;
+				if (glm::length(wi) <= 0.0001f) {
+					// total internal reflection
+					f = glm::vec3(0.0f);
+				}
+				if (absDot == 0.0f) {
+					f = m.T;
+				}
+				else {
+					f = m.T / absDot;
+				}
+				f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
+			}
+			f *= 2.0f;
+		}
+		else {
+			// diffuse
+			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+			if (m.type == DIFFUSE_BTDF) {
+				wi = -wi;
+			}
+			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+			pdf = absDot * 0.31831f;
+			f = m.R * 0.31831f;
+		}
+
+		pathSegments[idx].rayThroughput *= f * absDot / pdf;
+
+		// Change ray direction
+		pathSegments[idx].ray.direction = wi;
+		pathSegments[idx].ray.direction_inv = 1.0f / wi;
+		pathSegments[idx].ray.origin = intersect_point + (wi * 0.001f);
+		pathSegments[idx].medium = intersection.mi.medium;
+		pathSegments[idx].remainingBounces--;
+	}
+
 }
 
 __global__ void russianRouletteKernel_Vol(int iter, int num_paths, PathSegment* pathSegments)
@@ -887,6 +1066,7 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 		iter, traceDepth, jitterX, jitterY, dev_paths);
 
 	while (!iterationComplete) {
+		//std::cout << "depth: " << depth << std::endl;
 		// When intersecting with primitive, determine if there is a medium transition or not
 		// Update isect struct's mediumInterface member variable with the appropriate mediumInterface
 		computeIntersections_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
@@ -938,6 +1118,40 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			dev_lights,
 			hst_scene->lights.size(),
 			dev_geoms);
+
+		computeVisVolumetric << < numblocksPathSegmentTracing, blockSize1d >> > (
+			pixelcount_vol,
+			dev_paths,
+			dev_direct_light_rays,
+			dev_geoms,
+			hst_scene->geoms.size(),
+			dev_tris,
+			hst_scene->num_tris,
+			dev_direct_light_isects,
+			dev_bvh_nodes,
+			dev_media
+			);
+		
+			
+		mediumSpawnPathSegment << < numblocksPathSegmentTracing, blockSize1d >> > (
+			iter,
+			pixelcount_vol,
+			dev_intersections,
+			dev_direct_light_isects,
+			hst_scene->lights.size(),
+			dev_paths,
+			dev_materials,
+			dev_media);
+
+		surfaceSpawnPathSegment << < numblocksPathSegmentTracing, blockSize1d >> > (
+			iter,
+			pixelcount_vol,
+			dev_intersections,
+			dev_direct_light_isects,
+			hst_scene->lights.size(),
+			dev_paths,
+			dev_materials,
+			dev_media);
 
 		// RUSSIAN ROULETTE
 		if (depth >= 5) {

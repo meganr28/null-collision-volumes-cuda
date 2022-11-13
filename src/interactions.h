@@ -280,7 +280,7 @@ glm::vec3 computeDirectLightSamplePreVis(
         direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
     }
     else {
-        direct_light_isects[idx].LTE = light_material.emittance * light_material.R * f * absDot / pdf_L;
+        direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * f * absDot / pdf_L;
 
     }
 }

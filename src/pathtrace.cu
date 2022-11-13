@@ -1266,6 +1266,8 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 	}
 
 	while (!iterationComplete) {
+		//std::cout << "depth: " << depth << std::endl;
+
 		computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
 			depth
 			, pixelcount
