@@ -49,11 +49,11 @@ CAMERA
 RES         512 512
 FOVY        19.5
 ITERATIONS  5000
-DEPTH       32
+DEPTH       5
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
-MEDIUM      0
+MEDIUM      -1
 EYE         0.0 2.5 18
 LOOKAT      0 2.5 0
 UP          0 1 0

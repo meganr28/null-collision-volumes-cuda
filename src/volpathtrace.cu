@@ -429,7 +429,6 @@ __global__ void sampleParticipatingMedium(
 			pathSegments[idx].remainingBounces = 0;
 		}
 		intersections[idx].mi = mi;
-
 	}
 }
 
@@ -479,11 +478,7 @@ __global__ void generateMediumDirectLightSample(
 			geoms,
 			rng,
 			u01);
-		
-
-		
 	}
-
 }
 
 // kernel to handle interactions within a surface (instead of medium)
@@ -532,7 +527,6 @@ __global__ void generateSurfaceDirectLightSample(
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0, 1.0);
 
-
 		// TODO: Check surface intersection bsdf doesn't exist
 		computeDirectLightSamplePreVis(
 			idx,
@@ -548,9 +542,6 @@ __global__ void generateSurfaceDirectLightSample(
 			geoms,
 			rng,
 			u01);
-
-		
-
 	}
 }
 
@@ -572,14 +563,12 @@ __global__ void computeVisVolumetric(
 
 	if (path_index < num_paths)
 	{
-
 		if (pathSegments[path_index].remainingBounces == 0) {
 			return;
 		}
 		else if (pathSegments[path_index].prev_hit_was_specular) {
 			return;
 		}
-
 		
 		MISLightRay r = direct_light_rays[path_index];
 		MISLightIntersection isect = direct_light_intersections[path_index];
@@ -687,8 +676,6 @@ __global__ void computeVisVolumetric(
 			{
 				Geom& geom = geoms[i];
 
-
-
 				if (geom.type == SPHERE) {
 #ifdef ENABLE_SPHERES
 					t = sphereIntersectionTest(geom, r.ray, tmp_normal);
@@ -790,13 +777,11 @@ __global__ void mediumSpawnPathSegment(
 		pathSegments[idx].ray.direction = wi;
 		pathSegments[idx].ray.direction_inv = 1.0f / wi;
 		pathSegments[idx].ray.origin = intersections[idx].mi.samplePoint + (wi * 0.001f);
-		pathSegments[idx].medium = 
 		// TRY: Assert(mediumInterface.inside == mediumInterface.outside);
 		//pathSegments[idx].medium = pathSegments[idx].medium;
 		pathSegments[idx].medium = intersection.mi.medium;
 		pathSegments[idx].remainingBounces--;
 	}
-
 }
 
 __global__ void surfaceSpawnPathSegment(
@@ -939,10 +924,11 @@ __global__ void surfaceSpawnPathSegment(
 		pathSegments[idx].ray.direction = wi;
 		pathSegments[idx].ray.direction_inv = 1.0f / wi;
 		pathSegments[idx].ray.origin = intersect_point + (wi * 0.001f);
-		pathSegments[idx].medium = intersection.mi.medium;
+		//pathSegments[idx].medium = intersection.mi.medium;
+		pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
+			intersection.mediumInterface.inside;
 		pathSegments[idx].remainingBounces--;
 	}
-
 }
 
 __global__ void russianRouletteKernel_Vol(int iter, int num_paths, PathSegment* pathSegments)
@@ -1131,8 +1117,7 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			dev_bvh_nodes,
 			dev_media
 			);
-		
-			
+				
 		mediumSpawnPathSegment << < numblocksPathSegmentTracing, blockSize1d >> > (
 			iter,
 			pixelcount_vol,
@@ -1154,14 +1139,13 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			dev_media);
 
 		// RUSSIAN ROULETTE
-		if (depth >= 5) {
-
+		if (depth >= 5) 
+		{
 			russianRouletteKernel_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
 				iter,
 				pixelcount_vol,
 				dev_paths
 				);
-
 		}
 
 		if (depth == traceDepth) { iterationComplete = true; }

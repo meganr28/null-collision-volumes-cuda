@@ -254,7 +254,7 @@ glm::vec3 computeDirectLightSamplePreVis(
     direct_light_rays[idx].ray.origin = intersect_point + (wi * 0.001f);
     direct_light_rays[idx].ray.direction = wi;
     direct_light_rays[idx].ray.direction_inv = 1.0f / wi;
-    direct_light_rays[idx].medium = intersection.mi.medium;
+    direct_light_rays[idx].medium = pathSegments[idx].medium;
 
     absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
     // generate f, pdf, absdot from light sampled wi
@@ -272,16 +272,15 @@ glm::vec3 computeDirectLightSamplePreVis(
     }
     else {
         direct_light_rays[idx].f = material.R * 0.31831f; // INV_PI
-
     }
+    // TODO: if not medium, sample phase function
 
     // LTE = f * Li * absDot / pdf
     if (pdf_L <= 0.0001f) {
         direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
     }
     else {
-        direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * f * absDot / pdf_L;
-
+        direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f * absDot / pdf_L;
     }
 }
 

@@ -188,6 +188,9 @@ int Scene::loadGeom(string objectid) {
 
                         tri_bounds.push_back(newTriBounds);
 
+                        newTri.mediumInterface.inside = -1;
+                        newTri.mediumInterface.outside = -1;
+
                         mesh_tris.push_back(newTri);
                         num_tris++;
                     }
@@ -234,6 +237,9 @@ int Scene::loadGeom(string objectid) {
                 newGeom.translation, newGeom.rotation, newGeom.scale);
         newGeom.inverseTransform = glm::inverse(newGeom.transform);
         newGeom.invTranspose = glm::inverseTranspose(newGeom.transform);
+
+        newGeom.mediumInterface.inside = -1;
+        newGeom.mediumInterface.outside = -1;
 
         if (newGeom.type != MESH) {
             geoms.push_back(newGeom);
