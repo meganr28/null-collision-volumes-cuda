@@ -30,6 +30,7 @@
 #define ENABLE_SQUAREPLANES
 
 
+
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn_Vol(msg, FILENAME, __LINE__)
 void checkCUDAErrorFn_Vol(const char* msg, const char* file, int line) {
@@ -383,10 +384,8 @@ __global__ void computeIntersections_Vol(
 					isect.mediumInterface = geom.mediumInterface;
 				}
 				else {
-					MediumInterface mediumInterface;
-					mediumInterface.inside = pathSegments[path_index].medium;
-					mediumInterface.outside = pathSegments[path_index].medium;
-					isect.mediumInterface = mediumInterface;
+					isect.mediumInterface.inside = pathSegments[path_index].medium;
+					isect.mediumInterface.outside = pathSegments[path_index].medium;
 				}
 			}
 			
@@ -725,6 +724,7 @@ __global__ void computeVisVolumetric(
 				direct_light_intersections[path_index].LTE *= Tr;
 				return;
 			}
+
 			
 			// We encountered a bounding box/entry/exit of a volume, so we must change our medium value, update the origin, and traverse again
 			glm::vec3 old_origin = r.ray.origin;
@@ -734,10 +734,6 @@ __global__ void computeVisVolumetric(
 			r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
 				isect.mediumInterface.inside;
 		}
-		
-		// LTE = f * Li * absDot / pdf
-		// Already have f, Li, absDot, and pdf from when we generated ray
-		// MIS Power Heuristic already calulated in raygen
 	}
 }
 
@@ -776,7 +772,7 @@ __global__ void mediumSpawnPathSegment(
 		// Create new ray
 		pathSegments[idx].ray.direction = wi;
 		pathSegments[idx].ray.direction_inv = 1.0f / wi;
-		pathSegments[idx].ray.origin = intersections[idx].mi.samplePoint + (wi * 0.001f);
+		pathSegments[idx].ray.origin = intersection.mi.samplePoint + (wi * 0.001f);
 		// TRY: Assert(mediumInterface.inside == mediumInterface.outside);
 		//pathSegments[idx].medium = pathSegments[idx].medium;
 		pathSegments[idx].medium = intersection.mi.medium;
@@ -1068,7 +1064,7 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			);
 
 		depth++;
-
+		
 		// Attenuating ray throughput with medium stuff (phase function)
 		// Check if throughput is black, and break out of loop (set remainingBounces to 0)
 		sampleParticipatingMedium << <numblocksPathSegmentTracing, blockSize1d >> > (
@@ -1076,7 +1072,7 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			dev_paths,
 			dev_intersections,
 			dev_media);
-
+		
 		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distribution
 		// Else, handle surface interaction
 		generateMediumDirectLightSample << < numblocksPathSegmentTracing, blockSize1d >> > (
@@ -1137,16 +1133,16 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			dev_paths,
 			dev_materials,
 			dev_media);
-
+		
 		// RUSSIAN ROULETTE
-		if (depth >= 5) 
+		/*if (depth >= 5)
 		{
 			russianRouletteKernel_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
 				iter,
 				pixelcount_vol,
 				dev_paths
 				);
-		}
+		}*/
 
 		if (depth == traceDepth) { iterationComplete = true; }
 
@@ -1167,172 +1163,3 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 	cudaMemcpy(hst_scene->state.image.data(), dev_image,
 		pixelcount_vol * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
 }
-
-//void volPathtrace(uchar4* pbo, int frame, int iter) {
-//
-//
-//	//std::cout << "============================== " << iter << " ==============================" << std::endl;
-//
-//	const int traceDepth = hst_scene->state.traceDepth;
-//	const Camera& cam = hst_scene->state.camera;
-//
-//	// 2D block for generating ray from camera
-//	const dim3 blockSize2d(BLOCK_SIZE_2D, BLOCK_SIZE_2D);
-//	const dim3 blocksPerGrid2d(
-//		(cam.resolution.x + BLOCK_SIZE_2D - 1) / BLOCK_SIZE_2D,
-//		(cam.resolution.y + BLOCK_SIZE_2D - 1) / BLOCK_SIZE_2D);
-//
-//
-//	// 1D block for path tracing
-//	const int blockSize1d = BLOCK_SIZE_1D;
-//
-//	int depth = 0;
-//
-//	// --- PathSegment Tracing Stage ---
-//	// Shoot ray into scene, bounce between objects, push shading chunks
-//
-//	bool iterationComplete = false;
-//
-//	dim3 numblocksPathSegmentTracing = (pixelcount_vol + blockSize1d - 1) / blockSize1d;
-//
-//
-//	// gen ray
-//	thrust::default_random_engine rng = makeSeededRandomEngine_Vol(iter, iter, iter);
-//	thrust::uniform_real_distribution<float> upixel(0.0, 1.0f);
-//
-//	float jitterX = upixel(rng);
-//	float jitterY = upixel(rng);
-//
-//	if (cam.lens_radius > 0.0f) {
-//		// thin lens camera model based on my implementation from CIS 561
-//		// also based on https://www.semanticscholar.org/paper/A-Low-Distortion-Map-Between-Disk-and-Square-Shirley-Chiu/43226a3916a85025acbb3a58c17f6dc0756b35ac?p2df
-//		glm::mat3 M = glm::mat3(cam.right, cam.up, cam.view);
-//
-//		float focalT = (cam.focal_distance / glm::length(cam.lookAt - cam.position));
-//		glm::vec3 newRef = cam.position + focalT * (cam.lookAt - cam.position);
-//		glm::vec2 thinLensSample = glm::vec2(upixel(rng), upixel(rng));
-//
-//		// turn square shaped random sample domain into disc shaped
-//		glm::vec3 warped = glm::vec3(0.0f);
-//		glm::vec2 sampleRemap = 2.0f * thinLensSample - glm::vec2(1.0f);
-//		float r, theta = 0.0f;
-//		if (glm::abs(sampleRemap.x) > glm::abs(sampleRemap.y)) {
-//			r = sampleRemap.x;
-//			theta = (PI / 4.0f) * (sampleRemap.y / sampleRemap.x);
-//		}
-//		else {
-//			r = sampleRemap.y;
-//			theta = (PI / 2.0f) - (PI / 4.0f) * (sampleRemap.x / sampleRemap.y);
-//		}
-//		warped = r * glm::vec3(glm::cos(theta), glm::sin(theta), 0.0f);
-//
-//		glm::vec3 lensPoint = cam.lens_radius * warped;
-//
-//		glm::vec3 thinLensCamOrigin = cam.position + M * lensPoint;
-//
-//		generateRayFromThinLensCamera_Vol << <blocksPerGrid2d, blockSize2d >> > (cam,
-//			iter, traceDepth, jitterX, jitterY, thinLensCamOrigin, newRef, dev_paths);
-//	}
-//	else {
-//		generateRayFromCamera_Vol << <blocksPerGrid2d, blockSize2d >> > (cam,
-//			iter, traceDepth, jitterX, jitterY, dev_paths);
-//	}
-//
-//	while (!iterationComplete) {
-//		computeIntersections_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
-//			depth
-//			, pixelcount_vol
-//			, dev_paths
-//			, dev_geoms
-//			, hst_scene->geoms.size()
-//			, dev_tris
-//			, hst_scene->num_tris
-//			, dev_intersections
-//			, dev_bvh_nodes
-//			);
-//
-//		depth++;
-//
-//		genMISRaysKernel_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
-//			iter,
-//			pixelcount_vol,
-//			traceDepth,
-//			dev_intersections,
-//			dev_paths,
-//			dev_materials,
-//			dev_direct_light_rays,
-//			dev_bsdf_light_rays,
-//			dev_lights,
-//			hst_scene->lights.size(),
-//			dev_geoms,
-//			dev_direct_light_isects,
-//			dev_bsdf_light_isects
-//			);
-//
-//		computeDirectLightIsects_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
-//			depth
-//			, pixelcount_vol
-//			, dev_paths
-//			, dev_direct_light_rays
-//			, dev_geoms
-//			, hst_scene->geoms.size()
-//			, dev_tris
-//			, hst_scene->num_tris
-//			, dev_direct_light_isects
-//			, dev_bvh_nodes
-//			);
-//
-//		computeBSDFLightIsects_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
-//			depth
-//			, pixelcount_vol
-//			, dev_paths
-//			, dev_bsdf_light_rays
-//			, dev_geoms
-//			, hst_scene->geoms.size()
-//			, dev_tris
-//			, hst_scene->num_tris
-//			, dev_bsdf_light_isects
-//			, dev_bvh_nodes
-//			);
-//
-//		shadeMaterialUberKernel_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
-//			iter,
-//			pixelcount_vol,
-//			dev_intersections,
-//			dev_direct_light_isects,
-//			dev_bsdf_light_isects,
-//			hst_scene->lights.size(),
-//			dev_paths,
-//			dev_materials
-//			);
-//
-//		// RUSSIAN ROULETTE
-//		if (depth >= 5) {
-//
-//			russianRouletteKernel_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
-//				iter,
-//				pixelcount_vol,
-//				dev_paths
-//				);
-//
-//		}
-//
-//		if (depth == traceDepth) { iterationComplete = true; }
-//
-//		if (guiData != NULL)
-//		{
-//			guiData->TracedDepth = depth;
-//		}
-//	}
-//
-//
-//	// Assemble this iteration and apply it to the image
-//	finalGather_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (pixelcount_vol, dev_image, dev_paths);
-//
-//	// Send results to OpenGL buffer for rendering
-//	sendImageToPBO_Vol << <blocksPerGrid2d, blockSize2d >> > (pbo, cam.resolution, iter, dev_image);
-//
-//	// Retrieve image from GPU
-//	cudaMemcpy(hst_scene->state.image.data(), dev_image,
-//		pixelcount_vol * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
-//}

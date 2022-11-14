@@ -169,7 +169,7 @@ glm::vec3 Sample_homogeneous(
 
     // TODO: change this to randomly select channel with spectral rendering
     int channel = 0;
-    float dist = -glm::log(1 - rand) / medium.sigma_t[channel];
+    float dist = -glm::log(1.0f - rand) / medium.sigma_t[channel];
     float t = glm::min(dist * glm::length(ray.direction), isect.t);
     bool sampleMedium = t < isect.t;
     if (sampleMedium) {
@@ -181,10 +181,12 @@ glm::vec3 Sample_homogeneous(
 
     // Compute transmittance and sample density
     glm::vec3 Tr = glm::exp(-medium.sigma_t * glm::min(t, MAX_FLOAT) * glm::length(ray.direction));
-
+    
     // Return scattering weighting factor
     glm::vec3 density = sampleMedium ? (medium.sigma_t * Tr) : Tr;
+  
     // TODO: change this to account for pdfs of other spectral wavelengths...
+    // QUESTION: is pdf calculation correct?
     float pdf = density[0];
 
     return sampleMedium ? (Tr * medium.sigma_s / pdf) : (Tr / pdf);
@@ -218,6 +220,9 @@ glm::vec3 computeDirectLightSamplePreVis(
     ////////////////////////////////////////////////////
 
     glm::vec3 intersect_point = pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction;
+    if (intersection.mi.medium >= 0) {
+        intersect_point = intersection.mi.samplePoint;
+    }
 
     // choose light to directly sample
     direct_light_rays[idx].light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)num_lights)), num_lights - 1)].geom_ID;
@@ -256,32 +261,47 @@ glm::vec3 computeDirectLightSamplePreVis(
     direct_light_rays[idx].ray.direction_inv = 1.0f / wi;
     direct_light_rays[idx].medium = pathSegments[idx].medium;
 
-    absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-    // generate f, pdf, absdot from light sampled wi
-    if (material.type == SPEC_BRDF) {
-        // spec refl
-        direct_light_rays[idx].f = glm::vec3(0.0f);
-    }
-    else if (material.type == SPEC_BTDF) {
-        // spec refr
-        direct_light_rays[idx].f = glm::vec3(0.0f);
-    }
-    else if (material.type == SPEC_GLASS) {
-        // spec glass
-        direct_light_rays[idx].f = glm::vec3(0.0f);
-    }
-    else {
-        direct_light_rays[idx].f = material.R * 0.31831f; // INV_PI
-    }
-    // TODO: if not medium, sample phase function
 
-    // LTE = f * Li * absDot / pdf
-    if (pdf_L <= 0.0001f) {
-        direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+    // SURFACE INTERACTION
+    if (intersection.mi.medium == -1) {
+        absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+        // generate f, pdf, absdot from light sampled wi
+        if (material.type == SPEC_BRDF) {
+            // spec refl
+            direct_light_rays[idx].f = glm::vec3(0.0f);
+        }
+        else if (material.type == SPEC_BTDF) {
+            // spec refr
+            direct_light_rays[idx].f = glm::vec3(0.0f);
+        }
+        else if (material.type == SPEC_GLASS) {
+            // spec glass
+            direct_light_rays[idx].f = glm::vec3(0.0f);
+        }
+        else {
+            direct_light_rays[idx].f = material.R * 0.31831f; // INV_PI
+        }
+
+        // LTE = f * Li * absDot / pdf
+        if (pdf_L <= 0.0001f) {
+            direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+        }
+        else {
+            direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f * absDot / pdf_L;
+        }
     }
+    // VOLUME INTERACTION
     else {
-        direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f * absDot / pdf_L;
+        float p = evaluatePhaseHG(intersection.mi.wo, wi, homoMedia[intersection.mi.medium].g);
+        direct_light_rays[idx].f = glm::vec3(p);
+        if (pdf_L <= 0.0001f) {
+            direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+        }
+        else {
+            direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f / pdf_L;
+        }
     }
+
 }
 
 
