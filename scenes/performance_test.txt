@@ -4,7 +4,7 @@ R_COLOR        	40 20 10
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	2
+EMITTANCE   	5
 
 // Diffuse white
 MATERIAL 1
@@ -86,15 +86,22 @@ SPEC_GLASS
 IOR    			1.55
 EMITTANCE   	0
 
+// Homogeneous medium
+MEDIUM 0
+ABSORPTION 0.16
+SCATTERING 0.11
+ASYM_G     0.01
+
 // Camera
 CAMERA
 RES         1920 1080
 FOVY        19.5
 ITERATIONS  20000
-DEPTH       8
+DEPTH       16
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
+MEDIUM      0
 EYE         0.0 -4.5 14
 LOOKAT      0 0 0
 UP          0 1 0
@@ -104,6 +111,7 @@ UP          0 1 0
 OBJECT 0
 squareplane
 material 0
+mediuminterface -1 0
 TRANS       -4.85 0 -2
 ROTAT       0 60 0
 SCALE       3 2 1
@@ -112,6 +120,7 @@ SCALE       3 2 1
 OBJECT 1
 squareplane
 material 1
+mediuminterface -1 0
 TRANS       0 -2.5 0
 ROTAT       270 0 0
 SCALE       20 10 10
@@ -120,6 +129,7 @@ SCALE       20 10 10
 OBJECT 2
 squareplane
 material 1
+mediuminterface -1 0
 TRANS       0 7.5 0
 ROTAT       90 0 0
 SCALE       20 10 10
@@ -128,6 +138,7 @@ SCALE       20 10 10
 OBJECT 3
 squareplane
 material 1
+mediuminterface -1 0
 TRANS       0 2.5 -5
 ROTAT       0 0 0
 SCALE       20 10 10
@@ -136,6 +147,7 @@ SCALE       20 10 10
 OBJECT 4
 squareplane
 material 2
+mediuminterface -1 0
 TRANS       -10 2.5 0
 ROTAT       0 90 0
 SCALE       10 10 10
@@ -144,6 +156,7 @@ SCALE       10 10 10
 OBJECT 5
 squareplane
 material 2
+mediuminterface -1 0
 TRANS       10 2.5 0
 ROTAT       0 270 0
 SCALE       10 10 10
@@ -152,6 +165,7 @@ SCALE       10 10 10
 OBJECT 6
 squareplane
 material 1
+mediuminterface -1 0
 TRANS       0 2.5 5
 ROTAT       180 0 0
 SCALE       20 10 10
@@ -161,6 +175,7 @@ OBJECT 7
 mesh
 ../scenes/performance_test/teapot.obj
 material 4
+mediuminterface -1 0
 TRANS       0 2 0
 ROTAT       0 0 0
 SCALE       6 6 6
@@ -169,6 +184,7 @@ SCALE       6 6 6
 OBJECT 8
 cube
 material 2
+mediuminterface -1 0
 TRANS       7 -1.9 -3
 ROTAT       0 0 0
 SCALE       3 1.5 3
@@ -178,6 +194,7 @@ OBJECT 9
 mesh
 ../scenes/performance_test/teapot_2.obj
 material 4
+mediuminterface -1 0
 TRANS       0 2 0
 ROTAT       0 0 0
 SCALE       6 6 6
@@ -186,6 +203,7 @@ SCALE       6 6 6
 OBJECT 10
 sphere
 material 2
+mediuminterface -1 0
 TRANS       -6 -1 2
 ROTAT       0 0 0
 SCALE       3 3 3
