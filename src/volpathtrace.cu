@@ -69,7 +69,8 @@ static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 static BVHNode_GPU* dev_bvh_nodes = NULL;
-static HomogeneousMedium* dev_media = NULL;
+static Medium* dev_media = NULL;
+//cudaStream_t media_stream;
 
 static MISLightRay* dev_direct_light_rays = NULL;
 static MISLightIntersection* dev_direct_light_isects = NULL;
@@ -116,9 +117,13 @@ void volPathtraceInit(Scene* scene) {
 	cudaMalloc(&dev_intersections, pixelcount_vol * sizeof(ShadeableIntersection));
 	cudaMemset(dev_intersections, 0, pixelcount_vol * sizeof(ShadeableIntersection));
 
-	cudaMalloc(&dev_media, scene->media.size() * sizeof(HomogeneousMedium));
-	cudaMemcpy(dev_media, scene->media.data(), scene->media.size() * sizeof(HomogeneousMedium), cudaMemcpyHostToDevice);
+	cudaMalloc(&dev_media, scene->media.size() * sizeof(Medium));
+	cudaMemcpy(dev_media, scene->media.data(), scene->media.size() * sizeof(Medium), cudaMemcpyHostToDevice);
 
+	// Copy NanoVDB grid to the GPU asynchronously
+	//cudaStreamCreate(&media_stream);
+	//scene->gridHandle.deviceUpload(media_stream, false);
+	
 	// FOR LIGHT SAMPLED MIS RAY
 	cudaMalloc(&dev_direct_light_rays, pixelcount_vol * sizeof(MISLightRay));
 
@@ -405,7 +410,7 @@ __global__ void sampleParticipatingMedium(
 	int num_paths,
 	PathSegment* pathSegments,
 	ShadeableIntersection* intersections,
-	HomogeneousMedium* homoMedia
+	Medium* media
 )
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -422,7 +427,7 @@ __global__ void sampleParticipatingMedium(
 		MediumInteraction mi;
 		mi.medium = -1;
 		if (rayMediumIndex >= 0) {
-			pathSegments[idx].rayThroughput *= Sample_homogeneous(homoMedia[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
+			pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) == 0.0f) {
 			pathSegments[idx].remainingBounces = 0;
@@ -438,7 +443,7 @@ __global__ void generateMediumDirectLightSample(
 	PathSegment* pathSegments,
 	Material* materials,
 	ShadeableIntersection* intersections,
-	HomogeneousMedium* homoMedia,
+	Medium* media,
 	MISLightRay* direct_light_rays,
 	MISLightIntersection* direct_light_isects,
 	Light* lights,
@@ -469,7 +474,7 @@ __global__ void generateMediumDirectLightSample(
 			material,
 			materials,
 			intersection,
-			homoMedia,
+			media,
 			direct_light_rays,
 			direct_light_isects,
 			lights,
@@ -487,7 +492,7 @@ __global__ void generateSurfaceDirectLightSample(
 	PathSegment* pathSegments,
 	Material* materials,
 	ShadeableIntersection* intersections,
-	HomogeneousMedium* homoMedia,
+	Medium* media,
 	MISLightRay* direct_light_rays,
 	MISLightIntersection* direct_light_isects,
 	Light* lights,
@@ -533,7 +538,7 @@ __global__ void generateSurfaceDirectLightSample(
 			material,
 			materials,
 			intersection,
-			homoMedia,
+			media,
 			direct_light_rays,
 			direct_light_isects,
 			lights,
@@ -555,7 +560,7 @@ __global__ void computeVisVolumetric(
 	, int tris_size
 	, MISLightIntersection* direct_light_intersections
 	, BVHNode_GPU* bvh_nodes
-	, HomogeneousMedium* homoMedia
+	, Medium* media
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -716,7 +721,7 @@ __global__ void computeVisVolumetric(
 
 			// if the current ray has a medium, then attenuate throughput based on transmission and distance traveled
 			if (r.medium != -1) {
-				Tr *= Tr_homogeneous(homoMedia[r.medium], r.ray, t_min);
+				Tr *= Tr_homogeneous(media[r.medium], r.ray, t_min);
 			}
 
 			// if the intersected object IS the light source we selected, we are done
@@ -745,7 +750,7 @@ __global__ void mediumSpawnPathSegment(
 	, int num_lights
 	, PathSegment* pathSegments
 	, Material* materials
-	, HomogeneousMedium* homoMedia) {
+	, Medium* media) {
 
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
@@ -766,7 +771,7 @@ __global__ void mediumSpawnPathSegment(
 		pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
 		glm::vec3 wo = -pathSegments[idx].ray.direction;
 		glm::vec3 wi;
-		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), homoMedia[pathSegments[idx].medium].g);
+		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
 
 
 		// Create new ray
@@ -788,7 +793,7 @@ __global__ void surfaceSpawnPathSegment(
 	, int num_lights
 	, PathSegment* pathSegments
 	, Material* materials
-	, HomogeneousMedium* homoMedia) {
+	, Medium* media) {
 
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)

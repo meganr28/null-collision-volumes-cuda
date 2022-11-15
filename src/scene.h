@@ -8,6 +8,16 @@
 #include "utilities.h"
 #include "sceneStructs.h"
 
+//#include "C:/src/openvdb/openvdb/openvdb/tools/LevelSetSphere.h"
+//#include "C:/src/openvdb/nanovdb/nanovdb/NanoVDB.h"
+//#include "C:/src/openvdb/nanovdb/nanovdb/util/GridBuilder.h"
+//#include "C:/src/openvdb/nanovdb/nanovdb/util/IO.h"
+//#include "C:/src/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"
+//#include "C:/src/openvdb/nanovdb/nanovdb/util/CudaDeviceBuffer.h"
+//#include "C:/src/openvdb/nanovdb/nanovdb/util/Primitives.h"
+//#include "C:/src/openvdb/nanovdb/nanovdb/util/SampleFromVoxels.h"
+//#include "C:/src/openvdb/nanovdb/nanovdb/util/Ray.h"
+
 using namespace std;
 
 class Scene {
@@ -34,7 +44,10 @@ public:
     //std::vector<Mesh> meshes;
     std::vector<Light> lights;
     std::vector<Material> materials;
-    std::vector<HomogeneousMedium> media;
+    std::vector<Medium> media;
+    
+    // Handle to heterogeneous volume grid data
+    //nanovdb::GridHandle<nanovdb::CudaDeviceBuffer> gridHandle;
 
     std::vector<Tri> mesh_tris;
     std::vector<Tri> mesh_tris_sorted;

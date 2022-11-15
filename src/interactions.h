@@ -151,14 +151,32 @@ float Sample_p(const glm::vec3& wo, glm::vec3* wi, const glm::vec2& u, float g)
     return evaluatePhaseHG(wo, *wi, g);
 }
 
-inline __host__ __device__ glm::vec3 Tr_homogeneous(const HomogeneousMedium& medium, const Ray& ray, float t)
+inline __host__ __device__ float Density_heterogeneous(const Medium& medium, const Ray& ray, float t)
+{
+    // TODO: implement
+    return 0.f;
+}
+
+inline __host__ __device__ float D_heterogeneous(const Medium& medium, const Ray& ray, float t)
+{
+    // TODO: implement
+    return 0.f;
+}
+
+inline __host__ __device__ glm::vec3 Tr_homogeneous(const Medium& medium, const Ray& ray, float t)
 {
     return glm::exp(-medium.sigma_t * glm::min(t * glm::length(ray.direction), MAX_FLOAT));
 }
 
+inline __host__ __device__ glm::vec3 Tr_heterogeneous(const Medium& medium, const Ray& ray, float t)
+{
+    // TODO: implement
+    return glm::vec3(0.0);
+}
+
 inline __host__ __device__
 glm::vec3 Sample_homogeneous(
-    const HomogeneousMedium& medium, 
+    const Medium& medium, 
     const PathSegment& segment, 
     const ShadeableIntersection& isect, 
     MediumInteraction* mi, 
@@ -192,11 +210,23 @@ glm::vec3 Sample_homogeneous(
     return sampleMedium ? (Tr * medium.sigma_s / pdf) : (Tr / pdf);
 }
 
+inline __host__ __device__
+glm::vec3 Sample_heterogeneous(
+    const Medium& medium,
+    const PathSegment& segment,
+    const ShadeableIntersection& isect,
+    MediumInteraction* mi,
+    int mediumIndex,
+    float rand)
+{
+    // TODO: implement
+    return glm::vec3(0.0);
+}
+
 inline __host__ __device__ bool IsMediumTransition(const MediumInterface& mi)
 { 
     return mi.inside != mi.outside; 
 }
-
 
 // function to randomly choose a light, randomly choose point on light, compute LTE with that random point, and generate ray for shadow casting
 inline __host__ __device__
@@ -206,7 +236,7 @@ glm::vec3 computeDirectLightSamplePreVis(
     Material& material,
     Material* materials,
     ShadeableIntersection &intersection,
-    HomogeneousMedium* homoMedia,
+    Medium* media,
     MISLightRay* direct_light_rays,
     MISLightIntersection* direct_light_isects,
     Light* lights,
@@ -292,7 +322,7 @@ glm::vec3 computeDirectLightSamplePreVis(
     }
     // VOLUME INTERACTION
     else {
-        float p = evaluatePhaseHG(intersection.mi.wo, wi, homoMedia[intersection.mi.medium].g);
+        float p = evaluatePhaseHG(intersection.mi.wo, wi, media[intersection.mi.medium].g);
         direct_light_rays[idx].f = glm::vec3(p);
         if (pdf_L <= 0.0001f) {
             direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);

@@ -25,8 +25,6 @@
 #include "utilities.h"
 #include "scene.h"
 
-
-
 using namespace std;
 
 //-------------------------------

@@ -12,12 +12,21 @@
 
 // VOLUME STRUCTS
 
-// Represents a homogeneous medium
-struct HomogeneousMedium {
-    glm::vec3 sigma_a; // Absorption coefficient
-    glm::vec3 sigma_s; // Scattering coefficient
-    glm::vec3 sigma_t; // Extinction
-    float g;           // Asymmetry factor for Henyey-Greenstein
+enum MediumType {
+    HOMOGENEOUS,
+    HETEROGENEOUS,
+};
+
+// General representation of a medium
+struct Medium {
+    MediumType type;         // Homogeneous or heterogeneous
+    glm::mat4 worldToMedium; // Transform to local medium space
+    glm::vec3 sigma_a;       // Absorption coefficient
+    glm::vec3 sigma_s;       // Scattering coefficient
+    glm::vec3 sigma_t;       // Extinction
+    int gx, gy, gz;          // Grid dimensions
+    float g;                 // Asymmetry factor for Henyey-Greenstein
+    float invMaxDensity; 
 };
 
 struct MediumInteraction {

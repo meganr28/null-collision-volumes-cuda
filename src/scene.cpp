@@ -392,29 +392,74 @@ int Scene::loadMedium(string mediumid) {
     }
     else {
         cout << "Loading Medium " << id << "..." << endl;
-        HomogeneousMedium newHomogeneousMedium;
+        Medium newMedium;
+        string line;
+
+        //load object type
+        utilityCore::safeGetline(fp_in, line);
+        if (!line.empty() && fp_in.good()) {
+            if (strcmp(line.c_str(), "homogeneous") == 0) {
+                cout << "Creating new homogeneous volume..." << endl;
+                newMedium.type = HOMOGENEOUS;
+            }
+            else if (strcmp(line.c_str(), "heterogeneous") == 0) {
+                cout << "Creating new heterogeneous volume..." << endl;
+                newMedium.type = HETEROGENEOUS;
+            }
+        }
+
+        if (newMedium.type == HETEROGENEOUS) {
+            utilityCore::safeGetline(fp_in, line);
+            if (!line.empty() && fp_in.good()) {
+                // convert from .vdb to .nvdb
+                //openvdb::io::File file(line.c_str());
+                //auto vdbGrid = file.readGrid(gridName);
+                //auto handle = nanovdb::openToNanoVDB(vdbGrid);
+
+                // load .nvdb file and store handle in scene class (can access both host and device grid from this handle)
+                //gridHandle = nanovdb::io::readGrid<nanovdb::CudaDeviceBuffer>(line.c_str());
+                //gridHandle = nanovdb::createFogVolumeSphere<float, float, nanovdb::CudaDeviceBuffer>();
+
+                //// get raw pointer to NanoVDB grid on the CPU
+                //auto* grid = gridHandle.grid<float>();
+
+                //// load attributes into Medium struct and add to media list
+                //auto boundingBox = grid->worldBBox();
+                //auto gridDim = boundingBox.dim();
+                //std::cout << "Fog Volume Sphere Min: " << gridDim.min() << std::endl;
+                //std::cout << "Fog Volume Sphere Max: " << gridDim.max() << std::endl;
+                //// TODO: double check cell count calculation here
+                //nanovdb::Vec3f gridExtent = nanovdb::Vec3f(boundingBox.max() - boundingBox.min()) / nanovdb::Vec3f(grid->voxelSize());
+                //std::cout << "Fog Volume Sphere Extent: " << gridExtent[0] << " " << gridExtent[1] << " " << gridExtent[2] << std::endl;
+                //newMedium.gx = gridExtent[0];
+                //newMedium.gy = gridExtent[1];
+                //newMedium.gz = gridExtent[2];
+
+                //newMedium.invMaxDensity = 1.0f;
+                //newMedium.worldToMedium = glm::mat4(1.0f);
+            }
+        }
 
         //load static properties
         for (int i = 0; i < 3; i++) {
-            string line;
             utilityCore::safeGetline(fp_in, line);
             vector<string> tokens = utilityCore::tokenizeString(line);
             if (strcmp(tokens[0].c_str(), "ABSORPTION") == 0) {
                 float sa = atof(tokens[1].c_str());
                 glm::vec3 sigma_a(sa, sa, sa);
-                newHomogeneousMedium.sigma_a = sigma_a;
+                newMedium.sigma_a = sigma_a;
             }
             else if (strcmp(tokens[0].c_str(), "SCATTERING") == 0) {
                 float ss = atof(tokens[1].c_str());
                 glm::vec3 sigma_s(ss, ss, ss);
-                newHomogeneousMedium.sigma_s = sigma_s;
+                newMedium.sigma_s = sigma_s;
             }
             else if (strcmp(tokens[0].c_str(), "ASYM_G") == 0) {
-                newHomogeneousMedium.g = atof(tokens[1].c_str());
+                newMedium.g = atof(tokens[1].c_str());
             }
         }
-        newHomogeneousMedium.sigma_t = newHomogeneousMedium.sigma_a + newHomogeneousMedium.sigma_s;
-        media.push_back(newHomogeneousMedium);
+        newMedium.sigma_t = newMedium.sigma_a + newMedium.sigma_s;
+        media.push_back(newMedium);
         return 1;
     }
 }

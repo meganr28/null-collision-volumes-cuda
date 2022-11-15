@@ -34,15 +34,16 @@ EMITTANCE   	0
 MATERIAL 4
 R_COLOR         0.85 0.81 0.78
 T_COLOR     	0.85 0.81 0.78
-SPEC_GLASS
+DIFFUSE_BRDF
 IOR    			1.55
 EMITTANCE   	0
 
 // Homogeneous medium
 MEDIUM 0
-ABSORPTION 0.00
-SCATTERING 0.00
-ASYM_G     0.0
+homogeneous
+ABSORPTION 0.2
+SCATTERING 0.6
+ASYM_G     0.8
 
 // Camera
 CAMERA
@@ -53,7 +54,7 @@ DEPTH       5
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
-MEDIUM      0
+MEDIUM      -1
 EYE         0.0 2.5 18
 LOOKAT      0 2.5 0
 UP          0 1 0
@@ -63,7 +64,7 @@ UP          0 1 0
 OBJECT 0
 squareplane
 material 0
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 7.45 0
 ROTAT       90 0 0
 SCALE       3 3 1
@@ -72,7 +73,7 @@ SCALE       3 3 1
 OBJECT 1
 squareplane
 material 1
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 -2.5 0
 ROTAT       270 0 0
 SCALE       10 10 10
@@ -81,7 +82,7 @@ SCALE       10 10 10
 OBJECT 2
 squareplane
 material 1
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 7.5 0
 ROTAT       90 0 0
 SCALE       10 10 10
@@ -90,7 +91,7 @@ SCALE       10 10 10
 OBJECT 3
 squareplane
 material 1
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 2.5 -5
 ROTAT       0 0 0
 SCALE       10 10 10
@@ -99,7 +100,7 @@ SCALE       10 10 10
 OBJECT 4
 squareplane
 material 2
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       -5 2.5 0
 ROTAT       0 90 0
 SCALE       10 10 10
@@ -108,7 +109,7 @@ SCALE       10 10 10
 OBJECT 5
 squareplane
 material 3
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       5 2.5 0
 ROTAT       0 270 0
 SCALE       10 10 10
@@ -117,7 +118,7 @@ SCALE       10 10 10
 OBJECT 6
 squareplane
 material 1
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 2.5 5
 ROTAT       180 0 0
 SCALE       10 10 10
@@ -126,7 +127,7 @@ SCALE       10 10 10
 OBJECT 7
 cube
 material 4
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       -2 0 -3
 ROTAT       0 27.5 0
 SCALE       3 6 3
@@ -135,7 +136,7 @@ SCALE       3 6 3
 OBJECT 8
 cube
 material 4
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       2 -1 -0.75
 ROTAT       0 -17.5 0
 SCALE       3 3 3
