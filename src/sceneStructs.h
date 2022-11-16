@@ -163,6 +163,7 @@ struct PathSegment {
     int remainingBounces;
     int medium;
     bool prev_hit_was_specular;
+    bool prev_hit_null_material;
 };
 
 struct MISLightRay {

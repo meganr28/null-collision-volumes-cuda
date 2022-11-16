@@ -174,6 +174,7 @@ __global__ void generateRayFromThinLensCamera_Vol(Camera cam, int iter, int trac
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
+		segment.prev_hit_null_material = false;
 
 		float jittered_x = ((float)x) + jitterX;
 		float jittered_y = ((float)y) + jitterY;
@@ -210,6 +211,7 @@ __global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth, 
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
+		segment.prev_hit_null_material = false;
 		segment.medium = cam.medium;
 
 		float jittered_x = ((float)x) + jitterX;
@@ -511,6 +513,17 @@ __global__ void generateSurfaceDirectLightSample(
 		}
 
 		ShadeableIntersection intersection = intersections[idx];
+
+		if (intersection.materialId < 0) {
+			// Change ray direction
+			pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
+			pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
+			intersection.mediumInterface.inside;
+			pathSegments[idx].remainingBounces--;
+			pathSegments[idx].prev_hit_null_material = true;
+			return;
+		}
+
 		Material material = materials[intersection.materialId];
 
 		if (material.emittance > 0.0f) {
@@ -573,6 +586,9 @@ __global__ void computeVisVolumetric(
 		else if (pathSegments[path_index].prev_hit_was_specular) {
 			return;
 		}
+		else if (pathSegments[path_index].prev_hit_null_material) {
+			return;
+		}
 		
 		MISLightRay r = direct_light_rays[path_index];
 		MISLightIntersection isect = direct_light_intersections[path_index];
@@ -627,6 +643,7 @@ __global__ void computeVisVolumetric(
 							// triangle intersection test
 							Tri tri = tris[cur_node.tri_index];
 
+
 							t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
 							if (t >= -0.0001f) {
 								P = r.ray.origin + t * r.ray.direction;
@@ -679,6 +696,7 @@ __global__ void computeVisVolumetric(
 			for (int i = 0; i < geoms_size; ++i)
 			{
 				Geom& geom = geoms[i];
+
 
 				if (geom.type == SPHERE) {
 #ifdef ENABLE_SPHERES
@@ -758,7 +776,11 @@ __global__ void mediumSpawnPathSegment(
 		if (pathSegments[idx].remainingBounces == 0) {
 			return;
 		}
-		if (intersections[idx].mi.medium == -1) {
+		else if (intersections[idx].mi.medium == -1) {
+			return;
+		}
+		else if (pathSegments[idx].prev_hit_null_material) {
+			pathSegments[idx].prev_hit_null_material = false;
 			return;
 		}
 
@@ -802,6 +824,10 @@ __global__ void surfaceSpawnPathSegment(
 			return;
 		}
 		if (intersections[idx].mi.medium >= 0) {
+			return;
+		}
+		else if (pathSegments[idx].prev_hit_null_material) {
+			pathSegments[idx].prev_hit_null_material = false;
 			return;
 		}
 

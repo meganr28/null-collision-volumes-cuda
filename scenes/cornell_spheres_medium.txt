@@ -4,7 +4,7 @@ R_COLOR        	40 40 40
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	3
+EMITTANCE   	1
 
 // Diffuse white
 MATERIAL 1
@@ -32,8 +32,8 @@ EMITTANCE   	0
 
 // Specular white
 MATERIAL 4
-R_COLOR         0.85 0.81 0.78
-T_COLOR     	0.85 0.81 0.78
+R_COLOR         0.95 0.91 0.98
+T_COLOR     	0.95 0.91 0.98
 SPEC_GLASS
 IOR    			1.55
 EMITTANCE   	0
@@ -41,8 +41,8 @@ EMITTANCE   	0
 // Homogeneous medium
 MEDIUM 0
 homogeneous
-ABSORPTION 0.03
-SCATTERING 0.05
+ABSORPTION 0.73
+SCATTERING 0.45
 ASYM_G     0.1
 
 // Camera
@@ -54,7 +54,7 @@ DEPTH       8
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
-MEDIUM      0
+MEDIUM      -1
 EYE         0.0 2.5 18
 LOOKAT      0 2.5 0
 UP          0 1 0
@@ -64,7 +64,7 @@ UP          0 1 0
 OBJECT 0
 squareplane
 material 0
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 7.45 0
 ROTAT       90 0 0
 SCALE       3 3 1
@@ -73,7 +73,7 @@ SCALE       3 3 1
 OBJECT 1
 squareplane
 material 1
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 -2.5 0
 ROTAT       270 0 0
 SCALE       10 10 10
@@ -82,7 +82,7 @@ SCALE       10 10 10
 OBJECT 2
 squareplane
 material 1
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 7.5 0
 ROTAT       90 0 0
 SCALE       10 10 10
@@ -91,7 +91,7 @@ SCALE       10 10 10
 OBJECT 3
 squareplane
 material 1
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 2.5 -5
 ROTAT       0 0 0
 SCALE       10 10 10
@@ -100,7 +100,7 @@ SCALE       10 10 10
 OBJECT 4
 squareplane
 material 2
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       -5 2.5 0
 ROTAT       0 90 0
 SCALE       10 10 10
@@ -109,7 +109,7 @@ SCALE       10 10 10
 OBJECT 5
 squareplane
 material 3
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       5 2.5 0
 ROTAT       0 270 0
 SCALE       10 10 10
@@ -118,7 +118,7 @@ SCALE       10 10 10
 OBJECT 6
 squareplane
 material 1
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       0 2.5 5
 ROTAT       180 0 0
 SCALE       10 10 10
@@ -127,16 +127,17 @@ SCALE       10 10 10
 OBJECT 7
 sphere
 material 4
-mediuminterface -1 0
+mediuminterface -1 -1
 TRANS       -2 0 -3
 ROTAT       0 0 0
 SCALE       3 3 3
 
 // sphere
 OBJECT 8
-sphere
-material -1
-mediuminterface -1 0
+mesh
+../scenes/dragon.obj
+material 4
+mediuminterface 0 -1
 TRANS       2 2.5 1
 ROTAT       0 0 0
 SCALE       5 5 5
