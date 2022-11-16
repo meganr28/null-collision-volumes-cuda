@@ -89,6 +89,15 @@ set(headers
      src/ImGui/imstb_truetype.h 
 
      src/openvdb/NanoVDB.h
+     src/openvdb/util/GridBuilder.h
+     src/openvdb/util/GridHandle.h
+     src/openvdb/util/GridStats.h
+     src/openvdb/util/GridChecksum.h
+     src/openvdb/util/Range.h
+     src/openvdb/util/Invoke.h
+     src/openvdb/util/ForEach.h
+     src/openvdb/util/Reduce.h
+     src/openvdb/util/DitherLUT.h
     )
 
 set(sources
