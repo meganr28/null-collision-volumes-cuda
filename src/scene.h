@@ -9,7 +9,7 @@
 #include "sceneStructs.h"
 
 //#include "C:/src/openvdb/openvdb/openvdb/tools/LevelSetSphere.h"
-//#include "C:/src/openvdb/nanovdb/nanovdb/NanoVDB.h"
+#include "openvdb/NanoVDB.h"
 //#include "C:/src/openvdb/nanovdb/nanovdb/util/GridBuilder.h"
 //#include "C:/src/openvdb/nanovdb/nanovdb/util/IO.h"
 //#include "C:/src/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"

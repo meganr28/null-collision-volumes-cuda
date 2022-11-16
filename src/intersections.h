@@ -139,3 +139,27 @@ inline __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, glm::vec3 &
 
     return glm::length(r.origin - glm::vec3(sphere.transform * glm::vec4(objspaceIntersection, 1.0f)));
 }
+
+inline __device__ bool aabbIntersectionTest(const glm::vec3& aabbMin, const glm::vec3& aabbMax, Ray& r, float& tMin, float&tMax) {
+    float x1 = (aabbMin.x - r.origin.x) * r.direction_inv.x;
+    float x2 = (aabbMax.x - r.origin.x) * r.direction_inv.x;
+
+    tMin = glm::min(x1, x2);
+    tMax = glm::max(x1, x2);
+
+    float y1 = (aabbMin.y - r.origin.y) * r.direction_inv.y;
+    float y2 = (aabbMax.y - r.origin.y) * r.direction_inv.y;
+
+    tMin = glm::max(tMin, glm::min(y1, y2));
+    tMax = glm::min(tMax, glm::max(y1, y2));
+
+    float z1 = (aabbMin.z - r.origin.z) * r.direction_inv.z;
+    float z2 = (aabbMax.z - r.origin.z) * r.direction_inv.z;
+
+    tMin = glm::max(tMin, glm::min(z1, z2));
+    tMax = glm::min(tMax, glm::max(z1, z2));
+
+    bool intersect = tMin <= tMax && tMax >= 0;
+
+    return intersect;
+}

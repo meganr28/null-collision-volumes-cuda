@@ -219,7 +219,39 @@ glm::vec3 Sample_heterogeneous(
     int mediumIndex,
     float rand)
 {
-    // TODO: implement
+    //// Transform ray to local medium space
+    //Ray worldRay = segment.ray;
+
+    //Ray localRay;
+    //localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
+    //localRay.direction = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
+    //localRay.direction_inv = 1.0f / localRay.direction;
+    //float rayTMax = isect.t * glm::length(worldRay.direction);
+
+    //// Compute tmin and tmax of ray overlap with medium bounds
+    //glm::vec3 localBBMin = glm::vec3(0.0f);
+    //glm::vec3 localBBMax = glm::vec3(1.0f);
+    //float tMin, tMax;
+    //if (!aabbIntersectionTest(localBBMin, localBBMax, localRay, tMin, tMax)) {
+    //    return glm::vec3(1.0f);
+    //}
+
+    //// Run delta tracking to sample medium interaction
+    //float t = tMin;
+    //glm::vec3 samplePoint = localRay.origin + t * localRay.direction;
+    //while (true) {
+    //    t = -glm::log(1.0f - rand) * medium.invMaxDensity / medium.sigma_t[0]; // TODO: sigma_t is a float for heterogeneous medium
+    //    if (t >= tMax) {
+    //        break;
+    //    }
+
+    //    samplePoint = localRay.origin + t * localRay.direction;
+    //    if (Density_heterogeneous(samplePoint) * medium.invMaxDensity > rand) { // TODO: need different random number
+    //        mi->samplePoint = worldRay.origin + t * worldRay.direction;
+    //        mi->wo = -segment.ray.direction;
+    //    }
+    //}
+
     return glm::vec3(0.0);
 }
 

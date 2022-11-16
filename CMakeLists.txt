@@ -87,6 +87,8 @@ set(headers
      src/ImGui/imstb_rectpack.h 
      src/ImGui/imstb_textedit.h 
      src/ImGui/imstb_truetype.h 
+
+     src/openvdb/NanoVDB.h
     )
 
 set(sources
