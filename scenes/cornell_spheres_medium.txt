@@ -135,7 +135,7 @@ SCALE       3 3 3
 // sphere
 OBJECT 8
 sphere
-material 4
+material -1
 mediuminterface -1 0
 TRANS       2 2.5 1
 ROTAT       0 0 0
