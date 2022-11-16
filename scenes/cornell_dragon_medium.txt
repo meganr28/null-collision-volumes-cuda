@@ -1,0 +1,150 @@
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	40 20 20
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	6
+
+// Diffuse white
+MATERIAL 1
+R_COLOR         0.75 0.41 0.58
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse red
+MATERIAL 2
+R_COLOR         0.833 0.865 0.85
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse green
+MATERIAL 3
+R_COLOR         0.84 0.85 0.81
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 4
+R_COLOR         0.35 0.81 0.98
+T_COLOR     	0.55 0.91 0.58
+SPEC_GLASS
+IOR    			1.55
+EMITTANCE   	0
+
+// Homogeneous medium
+MEDIUM 0
+homogeneous
+ABSORPTION 0.393
+SCATTERING 0.495
+ASYM_G     0.01
+
+// Homogeneous medium
+MEDIUM 1
+homogeneous
+ABSORPTION 0.133
+SCATTERING 0.055
+ASYM_G     0.03
+
+// Camera
+CAMERA
+RES         512 512
+FOVY        19.5
+ITERATIONS  25000
+DEPTH       16
+FILE        cornell
+FOCAL_DISTANCE	17.9
+LENS_RADIUS		0.0
+MEDIUM      1
+EYE         0.0 2.5 18
+LOOKAT      0 2.5 0
+UP          0 1 0
+
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+mediuminterface -1 1
+TRANS       -4.85 -1.45 0
+ROTAT       90 90 0
+SCALE       2 2 1
+
+// Floor
+OBJECT 1
+squareplane
+material 1
+mediuminterface -1 1
+TRANS       0 -2.5 0
+ROTAT       270 0 0
+SCALE       10 10 10
+
+// Ceiling
+OBJECT 2
+squareplane
+material 1
+mediuminterface -1 1
+TRANS       0 7.5 0
+ROTAT       90 0 0
+SCALE       10 10 10
+
+// Back wall
+OBJECT 3
+squareplane
+material 1
+mediuminterface -1 1
+TRANS       0 2.5 -5
+ROTAT       0 0 0
+SCALE       10 10 10
+
+// Left wall
+OBJECT 4
+squareplane
+material 2
+mediuminterface -1 1
+TRANS       -5 2.5 0
+ROTAT       0 90 0
+SCALE       10 10 10
+
+// Right wall
+OBJECT 5
+squareplane
+material 3
+mediuminterface -1 1
+TRANS       5 2.5 0
+ROTAT       0 270 0
+SCALE       10 10 10
+
+// front wall
+OBJECT 6
+squareplane
+material 1
+mediuminterface -1 1
+TRANS       0 2.5 5
+ROTAT       180 0 0
+SCALE       10 10 10
+
+// sphere
+OBJECT 7
+mesh
+../scenes/dragon.obj
+material 4
+mediuminterface 0 1
+TRANS       2 2.5 1
+ROTAT       0 0 0
+SCALE       5 5 5
+
+// Ceiling light
+OBJECT 8
+squareplane
+material 0
+mediuminterface -1 1
+TRANS       4.85 3.35 0
+ROTAT       90 -90 0
+SCALE       2 2 1
