@@ -27,3 +27,40 @@ basic requirements below:
  `../scenes/cornell_boxes.txt`. Note that you may need to provide the full path instead of the relative path.
 3. In `Properties -> C/C++ -> Optimization`, select `Maximum Optimization (Favor Speed) (/O2)`
 4. When building with `cmake`, if you run into an issue where it cannot find a library file, make sure the appropriate `.lib` file is in the `external` folder.
+
+#### OpenVDB and NanoVDB
+
+This project depends on OpenVDB and NanoVDB for loading volumetric data. We followed the build instructions for `Windows`, however, the [official OpenVDB development repository](https://github.com/AcademySoftwareFoundation/openvdb) has directions for other platforms.
+The installation process for Windows was quite complicated and lengthy for us, so we've included the steps of our process incase it is of use to anyone else. Note that these might not necessarily be executed in order, and that building OpenVDB might
+differ depending on your system setup.
+
+1. Install [vcpkg](https://github.com/microsoft/vcpkg), [CMake](https://cmake.org/), and [Visual Studio](https://visualstudio.microsoft.com/downloads/).
+2. Run these commands in the directory with `vcpkg.exe` to install OpenVDB dependencies: 
+
+```
+vcpkg install zlib:x64-windows
+vcpkg install blosc:x64-windows
+vcpkg install tbb:x64-windows
+vcpkg install boost-iostreams:x64-windows
+vcpkg install boost-any:x64-windows
+vcpkg install boost-algorithm:x64-windows
+vcpkg install boost-uuid:x64-windows
+vcpkg install boost-interprocess:x64-windows
+vcpkg install openvdb:x64-windows
+```
+
+3. Clone and build the OpenVDB repository using the instructions [here](https://github.com/AcademySoftwareFoundation/openvdb) under `Windows -> Building OpenVDB`.
+4. Place the resulting `openvdb` directory within your project.
+5. Create a Visual Studio solution with CMake. We found the instructions [here](https://visualstudio.microsoft.com/downloads/) quite helpful (under `Build Steps`). 
+5. In `FindOpenVDB.cmake`, remove lines 655-662 (this is old functionality). This file should be located under `vcpkg/installed/x64-windows/share/openvdb`.
+6. In `CMakeLists.txt`, change `cmake_minimum_required(VERSION 3.1)` to `cmake_minimum_required(VERSION 3.18)`.
+7. In `CMakeLists.txt`, add the following lines at the bottom of the file to include OpenVDB as a dependency. Replace the `vcpkg` path with the path to your installation.
+
+```
+list(APPEND CMAKE_MODULE_PATH "C:/src/vcpkg/vcpkg/installed/x64-windows/share/openvdb")
+find_package(OpenVDB REQUIRED)
+target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
+```
+
+8. Include the appropriate header files in your project and see if you can build successfully. If not, check the OpenVDB site for [Troubleshooting tips](https://www.openvdb.org/documentation/doxygen/build.html#buildTroubleshooting). 
+9. Note that NanoVDB files are included in the `openvdb` directory that you cloned. 
