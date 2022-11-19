@@ -18,6 +18,7 @@
 //#include "openvdb/util/SampleFromVoxels.h"
 //#include "openvdb/util/Ray.h"
 
+#include <openvdb/openvdb.h>
 #include <openvdb/tools/LevelSetSphere.h>
 //#include "C:/src/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"
 #include "../external/include/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"

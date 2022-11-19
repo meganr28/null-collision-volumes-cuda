@@ -15,6 +15,8 @@ Scene::Scene(string filename) {
         cout << "Error reading from file - aborting!" << endl;
         throw;
     }
+
+    openvdb::initialize();
     while (fp_in.good()) {
         string line;
         utilityCore::safeGetline(fp_in, line);
@@ -413,14 +415,31 @@ int Scene::loadMedium(string mediumid) {
             if (!line.empty() && fp_in.good()) {
                 // convert from .vdb to .nvdb
                 //openvdb::io::File file(line.c_str());
-                //auto vdbGrid = file.readGrid(gridName);
+                openvdb::io::File file("C:/Users/megan/Documents/school/fall22/cis565/finalproject/scenes/vdb/cube.vdb");
+
+                file.open();
+                openvdb::io::File::NameIterator nameIter = file.beginName();
+                auto srcGrid = file.readGrid(nameIter.gridName());
                 //auto handle = nanovdb::openToNanoVDB(vdbGrid);
 
-                auto srcGrid = openvdb::tools::createLevelSetSphere<openvdb::FloatGrid>(100.0f, openvdb::Vec3f(0.0f), 1.0f);
+                //auto srcGrid = openvdb::tools::createLevelSetSphere<openvdb::FloatGrid>(100.0f, openvdb::Vec3f(0.0f), 1.0f);
                 // Convert the OpenVDB grid, srcGrid, into a NanoVDB grid handle.
-                auto handle = nanovdb::openToNanoVDB(*srcGrid);
+                auto handle = nanovdb::openToNanoVDB(srcGrid);
 
-                // load .nvdb file and store handle in scene class (can access both host and device grid from this handle)
+                // Define a (raw) pointer to the NanoVDB grid on the host. Note we match the value type of the srcGrid!
+                auto* dstGrid = handle.grid<float>();
+                if (!dstGrid)
+                    throw std::runtime_error("GridHandle does not contain a grid with value type float");
+
+                // Get accessors for the two grids.Note that accessors only accelerate repeated access!
+                auto dstAcc = dstGrid->getAccessor();
+                // Access and print out a cross-section of the narrow-band level set from the two grids
+                for (int i = 0; i < 10; ++i) {
+                    printf("(%3i,0,0) NanoVDB CPU: % -4.2f\n", i, dstAcc.getValue(nanovdb::Coord(i, 0, 0)));
+                }
+
+                file.close();
+                //// load .nvdb file and store handle in scene class (can access both host and device grid from this handle)
                 //gridHandle = nanovdb::io::readGrid<nanovdb::CudaDeviceBuffer>(line.c_str());
                 //gridHandle = nanovdb::createFogVolumeSphere<float, float, nanovdb::CudaDeviceBuffer>();
 
