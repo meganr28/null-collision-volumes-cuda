@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.18)
 
 project(null-collision-volumes-cuda)
 
@@ -87,17 +87,6 @@ set(headers
      src/ImGui/imstb_rectpack.h 
      src/ImGui/imstb_textedit.h 
      src/ImGui/imstb_truetype.h 
-
-     src/openvdb/NanoVDB.h
-     src/openvdb/util/GridBuilder.h
-     src/openvdb/util/GridHandle.h
-     src/openvdb/util/GridStats.h
-     src/openvdb/util/GridChecksum.h
-     src/openvdb/util/Range.h
-     src/openvdb/util/Invoke.h
-     src/openvdb/util/ForEach.h
-     src/openvdb/util/Reduce.h
-     src/openvdb/util/DitherLUT.h
     )
 
 set(sources
@@ -135,3 +124,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     ${LIBRARIES}
     
     )
+
+list(APPEND CMAKE_MODULE_PATH "C:/src/vcpkg/vcpkg/installed/x64-windows/share/openvdb")
+find_package(OpenVDB REQUIRED)
+target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)

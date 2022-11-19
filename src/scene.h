@@ -9,14 +9,19 @@
 #include "sceneStructs.h"
 
 //#include "C:/src/openvdb/openvdb/openvdb/tools/LevelSetSphere.h"
-#include "openvdb/NanoVDB.h"
-#include "openvdb/util/GridBuilder.h"
-#include "openvdb/util/IO.h"
+//#include "openvdb/NanoVDB.h"
+//#include "openvdb/util/GridBuilder.h"
+//#include "openvdb/util/IO.h"
 //#include "openvdb/util/OpenToNanoVDB.h"
-#include "openvdb/util/CudaDeviceBuffer.h"
-#include "openvdb/util/Primitives.h"
+//#include "openvdb/util/CudaDeviceBuffer.h"
+//#include "openvdb/util/Primitives.h"
 //#include "openvdb/util/SampleFromVoxels.h"
 //#include "openvdb/util/Ray.h"
+
+#include <openvdb/tools/LevelSetSphere.h>
+//#include "C:/src/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"
+#include "../external/include/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"
+#include "../external/include/openvdb/nanovdb/nanovdb/util/IO.h"
 
 using namespace std;
 
@@ -47,7 +52,7 @@ public:
     std::vector<Medium> media;
     
     // Handle to heterogeneous volume grid data
-    nanovdb::GridHandle<nanovdb::CudaDeviceBuffer> gridHandle;
+    //nanovdb::GridHandle<nanovdb::CudaDeviceBuffer> gridHandle;
 
     std::vector<Tri> mesh_tris;
     std::vector<Tri> mesh_tris_sorted;

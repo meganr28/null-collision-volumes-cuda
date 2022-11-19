@@ -416,28 +416,32 @@ int Scene::loadMedium(string mediumid) {
                 //auto vdbGrid = file.readGrid(gridName);
                 //auto handle = nanovdb::openToNanoVDB(vdbGrid);
 
+                auto srcGrid = openvdb::tools::createLevelSetSphere<openvdb::FloatGrid>(100.0f, openvdb::Vec3f(0.0f), 1.0f);
+                // Convert the OpenVDB grid, srcGrid, into a NanoVDB grid handle.
+                auto handle = nanovdb::openToNanoVDB(*srcGrid);
+
                 // load .nvdb file and store handle in scene class (can access both host and device grid from this handle)
                 //gridHandle = nanovdb::io::readGrid<nanovdb::CudaDeviceBuffer>(line.c_str());
-                gridHandle = nanovdb::createFogVolumeSphere<float, float, nanovdb::CudaDeviceBuffer>();
+                //gridHandle = nanovdb::createFogVolumeSphere<float, float, nanovdb::CudaDeviceBuffer>();
 
-                // get raw pointer to NanoVDB grid on the CPU
-                auto* grid = gridHandle.grid<float>();
+                //// get raw pointer to NanoVDB grid on the CPU
+                //auto* grid = gridHandle.grid<float>();
 
-                // load attributes into Medium struct and add to media list
-                auto boundingBox = grid->worldBBox();
-                auto gridDim = boundingBox.dim();
-                std::cout << "Fog Volume Sphere Min: " << boundingBox.min()[0] << " " << boundingBox.min()[1] << " " << boundingBox.min()[2] << std::endl;
-                std::cout << "Fog Volume Sphere Max: " << boundingBox.max()[0] << " " << boundingBox.max()[1] << " " << boundingBox.max()[2] << std::endl;
-                // TODO: double check cell count calculation here
-                nanovdb::Vec3f gridExtent = nanovdb::Vec3f(boundingBox.max() - boundingBox.min()) / nanovdb::Vec3f(grid->voxelSize());
-                std::cout << "Voxel Size: " << grid->voxelSize()[0] << " " << grid->voxelSize()[1] << " " << grid->voxelSize()[2] << std::endl;
-                std::cout << "Fog Volume Sphere Extent: " << gridExtent[0] << " " << gridExtent[1] << " " << gridExtent[2] << std::endl;
-                newMedium.gx = gridExtent[0];
-                newMedium.gy = gridExtent[1];
-                newMedium.gz = gridExtent[2];
+                //// load attributes into Medium struct and add to media list
+                //auto boundingBox = grid->worldBBox();
+                //auto gridDim = boundingBox.dim();
+                //std::cout << "Fog Volume Sphere Min: " << boundingBox.min()[0] << " " << boundingBox.min()[1] << " " << boundingBox.min()[2] << std::endl;
+                //std::cout << "Fog Volume Sphere Max: " << boundingBox.max()[0] << " " << boundingBox.max()[1] << " " << boundingBox.max()[2] << std::endl;
+                //// TODO: double check cell count calculation here
+                //nanovdb::Vec3f gridExtent = nanovdb::Vec3f(boundingBox.max() - boundingBox.min()) / nanovdb::Vec3f(grid->voxelSize());
+                //std::cout << "Voxel Size: " << grid->voxelSize()[0] << " " << grid->voxelSize()[1] << " " << grid->voxelSize()[2] << std::endl;
+                //std::cout << "Fog Volume Sphere Extent: " << gridExtent[0] << " " << gridExtent[1] << " " << gridExtent[2] << std::endl;
+                //newMedium.gx = gridExtent[0];
+                //newMedium.gy = gridExtent[1];
+                //newMedium.gz = gridExtent[2];
 
-                newMedium.invMaxDensity = 1.0f;
-                newMedium.worldToMedium = glm::mat4(1.0f);
+                //newMedium.invMaxDensity = 1.0f;
+                //newMedium.worldToMedium = glm::mat4(1.0f);
             }
         }
 
