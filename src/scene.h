@@ -20,9 +20,9 @@
 
 #include <openvdb/openvdb.h>
 #include <openvdb/tools/LevelSetSphere.h>
-//#include "C:/src/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"
-#include "../external/include/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"
+#include "../external/include/openvdb/nanovdb/nanovdb/util//CudaDeviceBuffer.h"
 #include "../external/include/openvdb/nanovdb/nanovdb/util/IO.h"
+#include "../external/include/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"
 
 using namespace std;
 
@@ -53,7 +53,7 @@ public:
     std::vector<Medium> media;
     
     // Handle to heterogeneous volume grid data
-    //nanovdb::GridHandle<nanovdb::CudaDeviceBuffer> gridHandle;
+    nanovdb::GridHandle<nanovdb::CudaDeviceBuffer> gridHandle;
 
     std::vector<Tri> mesh_tris;
     std::vector<Tri> mesh_tris_sorted;

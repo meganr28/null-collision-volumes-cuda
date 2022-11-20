@@ -70,6 +70,7 @@ static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 static BVHNode_GPU* dev_bvh_nodes = NULL;
 static Medium* dev_media = NULL;
+static nanovdb::NanoGrid<float>* dev_media_density = NULL;
 //cudaStream_t media_stream;
 
 static MISLightRay* dev_direct_light_rays = NULL;
@@ -85,6 +86,16 @@ int pixelcount_vol;
 void InitDataContainer_Vol(GuiDataContainer* imGuiData)
 {
 	guiData = imGuiData;
+}
+
+// TODO: remove these when done testing
+__global__ void grid_test_kernel(const nanovdb::NanoGrid<float>* deviceGrid)
+{
+	if (threadIdx.x > 6)
+		return;
+	int i = 97 + threadIdx.x;
+	auto gpuAcc = deviceGrid->getAccessor();
+	printf("(%3i,0,0) NanoVDB gpu: % -4.2f\n", i, gpuAcc.getValue(nanovdb::Coord(i, i, i)));
 }
 
 void volPathtraceInit(Scene* scene) {
@@ -120,7 +131,12 @@ void volPathtraceInit(Scene* scene) {
 	cudaMalloc(&dev_media, scene->media.size() * sizeof(Medium));
 	cudaMemcpy(dev_media, scene->media.data(), scene->media.size() * sizeof(Medium), cudaMemcpyHostToDevice);
 
-	// Copy NanoVDB grid to the GPU asynchronously
+	// Copy NanoVDB grid to the GPU
+	scene->gridHandle.deviceUpload();
+	dev_media_density = scene->gridHandle.deviceGrid<float>();
+	//grid_test_kernel <<< 1, 64 >>> (dev_media_density);
+	
+	// Copy NanoVDB grid to the GPU asynchronously (for later)
 	//cudaStreamCreate(&media_stream);
 	//scene->gridHandle.deviceUpload(media_stream, false);
 	
