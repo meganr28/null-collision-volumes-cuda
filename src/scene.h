@@ -24,6 +24,8 @@
 #include "../external/include/openvdb/nanovdb/nanovdb/util/IO.h"
 #include "../external/include/openvdb/nanovdb/nanovdb/util/OpenToNanoVDB.h"
 
+//#include "../external/include/tiny_gltf.h"
+
 using namespace std;
 
 class Scene {
@@ -32,6 +34,7 @@ private:
     int loadMaterial(string materialid);
     int loadMedium(string mediumid);
     int loadGeom(string objectid);
+    int loadGLTF(string objectid);
     int loadCamera();
 
 

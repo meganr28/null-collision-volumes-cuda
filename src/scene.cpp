@@ -6,6 +6,11 @@
 #include "tiny_obj_loader.h"
 #include <stack>
 
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <tiny_gltf.h>
+
 Scene::Scene(string filename) {
     cout << "Reading scene from " << filename << " ..." << endl;
     cout << " " << endl;
@@ -263,6 +268,19 @@ int Scene::loadGeom(string objectid) {
         return 1;
     }
 }
+
+int Scene::loadGLTF(string gltf_file) {
+    tinygltf::Model model;
+    tinygltf::TinyGLTF loader;
+    std::string err;
+    std::string warn;
+
+    bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, gltf_file);
+
+    return 0;
+}
+
+
 
 int Scene::loadCamera() {
     cout << "Loading Camera ..." << endl;
