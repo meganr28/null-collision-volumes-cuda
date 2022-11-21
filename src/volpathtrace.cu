@@ -428,7 +428,8 @@ __global__ void sampleParticipatingMedium(
 	int num_paths,
 	PathSegment* pathSegments,
 	ShadeableIntersection* intersections,
-	Medium* media
+	Medium* media,
+	const nanovdb::NanoGrid<float>* media_density
 )
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -445,7 +446,12 @@ __global__ void sampleParticipatingMedium(
 		MediumInteraction mi;
 		mi.medium = -1;
 		if (rayMediumIndex >= 0) {
-			pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
+			if (media[rayMediumIndex].type == HOMOGENEOUS) {
+				pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
+			}
+			else {
+				pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
+			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) == 0.0f) {
 			pathSegments[idx].remainingBounces = 0;
@@ -589,7 +595,8 @@ __global__ void computeVisVolumetric(
 	, int tris_size
 	, MISLightIntersection* direct_light_intersections
 	, BVHNode_GPU* bvh_nodes
-	, Medium* media
+	, Medium* media,
+	const nanovdb::NanoGrid<float>* media_density
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -608,6 +615,9 @@ __global__ void computeVisVolumetric(
 		
 		MISLightRay r = direct_light_rays[path_index];
 		MISLightIntersection isect = direct_light_intersections[path_index];
+
+		thrust::default_random_engine& rng = pathSegments[path_index].rng_engine;
+		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 		
 		glm::vec3 Tr = glm::vec3(1.0f);
 
@@ -755,7 +765,12 @@ __global__ void computeVisVolumetric(
 
 			// if the current ray has a medium, then attenuate throughput based on transmission and distance traveled
 			if (r.medium != -1) {
-				Tr *= Tr_homogeneous(media[r.medium], r.ray, t_min);
+				if (media[r.medium].type == HOMOGENEOUS) {
+					Tr *= Tr_homogeneous(media[r.medium], r.ray, t_min);
+				}
+				else {
+					Tr *= Tr_heterogeneous(media[r.medium], r, media_density, t_min, rng, u01);
+				}
 			}
 
 			// if the intersected object IS the light source we selected, we are done
@@ -1118,7 +1133,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			pixelcount_vol,
 			dev_paths,
 			dev_intersections,
-			dev_media);
+			dev_media,
+			dev_media_density);
 		
 		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distribution
 		// Else, handle surface interaction
@@ -1158,7 +1174,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			hst_scene->num_tris,
 			dev_direct_light_isects,
 			dev_bvh_nodes,
-			dev_media
+			dev_media,
+			dev_media_density
 			);
 				
 		mediumSpawnPathSegment << < numblocksPathSegmentTracing, blockSize1d >> > (

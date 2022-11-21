@@ -153,7 +153,7 @@ float Sample_p(const glm::vec3& wo, glm::vec3* wi, const glm::vec2& u, float g)
     return evaluatePhaseHG(wo, *wi, g);
 }
 
-inline __host__ __device__ float D_heterogeneous(const Medium& medium, nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_index)
+inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_index)
 {
     glm::vec3 min_cell_index = glm::vec3(0, 0, 0);
     glm::vec3 max_cell_index = glm::vec3(medium.gx, medium.gy, medium.gz);
@@ -165,7 +165,7 @@ inline __host__ __device__ float D_heterogeneous(const Medium& medium, nanovdb::
     return gpuAcc.getValue(nanovdb::Coord(sample_index.x, sample_index.y, sample_index.z));
 }
 
-inline __host__ __device__ float Density_heterogeneous(const Medium& medium, nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_point)
+inline __host__ __device__ float Density_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_point)
 {
     glm::vec3 pSamples(sample_point.x * medium.gx - 0.5f, sample_point.y * medium.gy - 0.5f, sample_point.z * medium.gz - 0.5f);
     glm::vec3 pi = glm::floor(pSamples);
@@ -188,14 +188,14 @@ inline __host__ __device__ glm::vec3 Tr_homogeneous(const Medium& medium, const 
 
 inline __host__ __device__ glm::vec3 Tr_heterogeneous(
     const Medium& medium, 
-    const PathSegment& segment, 
-    nanovdb::NanoGrid<float>* media_density,
+    const MISLightRay& mis_ray, 
+    const nanovdb::NanoGrid<float>* media_density,
     float t,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
 {
     // Transform ray to local medium space
-    Ray worldRay = segment.ray;
+    Ray worldRay = mis_ray.ray;
 
     Ray localRay;
     localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
@@ -268,7 +268,7 @@ glm::vec3 Sample_heterogeneous(
     const PathSegment& segment,
     const ShadeableIntersection& isect,
     MediumInteraction* mi,
-    nanovdb::NanoGrid<float>* media_density,
+    const nanovdb::NanoGrid<float>* media_density,
     int mediumIndex,
     thrust::default_random_engine& rng, 
     thrust::uniform_real_distribution<float>& u01)

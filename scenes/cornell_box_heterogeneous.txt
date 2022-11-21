@@ -41,7 +41,7 @@ EMITTANCE   	0
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/smoke.vdb
+../scenes/vdb/cube.vdb
 ABSORPTION 0.06
 SCATTERING 0.09
 ASYM_G     0.01
@@ -49,8 +49,8 @@ ASYM_G     0.01
 // Homogeneous medium
 MEDIUM 1
 homogeneous
-ABSORPTION 0.02
-SCATTERING 0.01
+ABSORPTION 0.09
+SCATTERING 0.05
 ASYM_G     0.1
 
 // Camera
