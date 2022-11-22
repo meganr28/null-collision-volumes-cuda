@@ -42,21 +42,21 @@ EMITTANCE   	0
 MEDIUM 0
 heterogeneous
 ../scenes/vdb/cube.vdb
-ABSORPTION 0.06
-SCATTERING 0.09
+ABSORPTION 4.9
+SCATTERING 0.7
 ASYM_G     0.01
 
 // Camera
 CAMERA
 RES         512 512
 FOVY        19.5
-ITERATIONS  5000
-DEPTH       1
+ITERATIONS  10000
+DEPTH       8
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
 MEDIUM      -1
-EYE         0.0 2.5 30
+EYE         0.0 2.5 50
 LOOKAT      0 2.5 0
 UP          0 1 0
 
@@ -66,7 +66,7 @@ OBJECT 0
 squareplane
 material 0
 mediuminterface -1 -1
-TRANS       0 7.45 0
+TRANS       0 9.85 0
 ROTAT       90 0 0
 SCALE       3 3 1
 
@@ -75,51 +75,51 @@ OBJECT 1
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 -2.5 0
+TRANS       0 -10.0 0
 ROTAT       270 0 0
-SCALE       10 10 10
+SCALE       20 20 20
 
 // Ceiling
 OBJECT 2
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 7.5 0
+TRANS       0 10.0 0
 ROTAT       90 0 0
-SCALE       10 10 10
+SCALE       20 20 20
 
 // Back wall
 OBJECT 3
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 2.5 -5
+TRANS       0 0 -10
 ROTAT       0 0 0
-SCALE       10 10 10
+SCALE       20 20 20
 
 // Left wall
 OBJECT 4
 squareplane
 material 2
 mediuminterface -1 -1
-TRANS       -5 2.5 0
+TRANS       -10 0 0
 ROTAT       0 90 0
-SCALE       10 10 10
+SCALE       20 20 20
 
 // Right wall
 OBJECT 5
 squareplane
 material 3
 mediuminterface -1 -1
-TRANS       5 2.5 0
+TRANS       10 0 0
 ROTAT       0 270 0
-SCALE       10 10 10
+SCALE       20 20 20
 
 // front wall
 OBJECT 6
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 2.5 5
+TRANS       0 0 10
 ROTAT       180 0 0
-SCALE       10 10 10
+SCALE       20 20 20

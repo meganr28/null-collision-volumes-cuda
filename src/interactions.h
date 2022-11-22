@@ -162,7 +162,8 @@ inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nan
         sample_index.z < min_cell_index.z || sample_index.z >= max_cell_index.z)
         return 0;
     auto gpuAcc = media_density->getAccessor();
-    return gpuAcc.getValue(nanovdb::Coord(sample_index.x, sample_index.y, sample_index.z));
+    auto density = gpuAcc.getValue(nanovdb::Coord(sample_index.x, sample_index.y, sample_index.z));
+    return (density >= 0.0f) ? density : -density;
 }
 
 inline __host__ __device__ float Density_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_point)
@@ -172,13 +173,13 @@ inline __host__ __device__ float Density_heterogeneous(const Medium& medium, con
     glm::vec3 d = pSamples - pi;
 
     // trilinear sampling of denisty values nearest to sampling point
-    float d00 = glm::mix(d.x, D_heterogeneous(medium, media_density, pi), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 0)));
-    float d10 = glm::mix(d.x, D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 0)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 0)));
-    float d01 = glm::mix(d.x, D_heterogeneous(medium, media_density, pi + glm::vec3(0, 0, 1)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 1)));
-    float d11 = glm::mix(d.x, D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 1)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 1)));
-    float d0 = glm::mix(d.y, d00, d10);
-    float d1 = glm::mix(d.y, d01, d11);
-    return glm::mix(d.z, d0, d1);
+    float d00 = glm::mix(D_heterogeneous(medium, media_density, pi), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 0)), d.x);
+    float d10 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 0)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 0)), d.x);
+    float d01 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 0, 1)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 1)), d.x);
+    float d11 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 1)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 1)), d.x);
+    float d0 = glm::mix(d00, d10, d.y);
+    float d1 = glm::mix(d01, d11, d.y);
+    return glm::mix(d0, d1, d.z);
 }
 
 inline __host__ __device__ glm::vec3 Tr_homogeneous(const Medium& medium, const Ray& ray, float t)
@@ -188,6 +189,7 @@ inline __host__ __device__ glm::vec3 Tr_homogeneous(const Medium& medium, const 
 
 inline __host__ __device__ glm::vec3 Tr_heterogeneous(
     const Medium& medium, 
+    PathSegment& segment, // TODO: REMOVE AFTER DEBUGGING
     const MISLightRay& mis_ray, 
     const nanovdb::NanoGrid<float>* media_density,
     float t,
@@ -199,29 +201,56 @@ inline __host__ __device__ glm::vec3 Tr_heterogeneous(
 
     Ray localRay;
     localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
-    localRay.direction = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
+    localRay.direction = glm::normalize(glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f)));
     localRay.direction_inv = 1.0f / localRay.direction;
-    float rayTMax = t * glm::length(worldRay.direction);
+    float rayTMax = t * glm::length(worldRay.direction); // TODO: use rayTMax in computation?
 
     // Compute tmin and tmax of ray overlap with medium bounds
     glm::vec3 localBBMin = glm::vec3(0.0f);
     glm::vec3 localBBMax = glm::vec3(1.0f);
-    float tMin, tMax;
-    if (!aabbIntersectionTest(localBBMin, localBBMax, localRay, tMin, tMax, t)) {
+    float tMin, tMax, t_intersect;
+    if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t_intersect, true)) {
+        //segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
         return glm::vec3(1.0f);
     }
-
+    
+    //segment.accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
+    int num_iters = 0;
     float Tr = 1.0f;
     t = tMin;
     glm::vec3 samplePoint = localRay.origin + t * localRay.direction;
     while (true) {
         t -= glm::log(1.0f - u01(rng)) * medium.invMaxDensity / medium.sigma_t[0];  // TODO: sigma_t is a float for heterogeneous medium
-        if (t >= tMax)
+        /*float t_inc = glm::log(1.0f - u01(rng)) * medium.invMaxDensity / medium.sigma_t[0];
+        if (num_iters == 0 && t_inc > 0) {
+            segment.accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
+        }*/
+        if (t >= tMax) {
+            if (num_iters == 0) {
+                //segment.accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
+            }
             break;
+        }
         samplePoint = localRay.origin + t * localRay.direction;
         
+        if (num_iters == 0) {
+            //segment.accumulatedIrradiance += glm::vec3(0.0, 0.0, 0.0);
+        }
         float density = Density_heterogeneous(medium, media_density, samplePoint);
+        if (num_iters == 0) {
+            
+            if (density > 0.149 && density < 0.151) {
+                //segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+            }
+            else {
+                //segment.accumulatedIrradiance += glm::vec3(1.0, 1.0, 0.0);
+            }
+
+        }
         Tr *= 1.0 - glm::max(0.0f, density * medium.invMaxDensity);
+        //segment.accumulatedIrradiance += density;
+        num_iters++;
+        //break;
     }
     return glm::vec3(Tr);
 }
@@ -265,7 +294,7 @@ glm::vec3 Sample_homogeneous(
 inline __host__ __device__
 glm::vec3 Sample_heterogeneous(
     const Medium& medium,
-    const PathSegment& segment,
+    PathSegment& segment,
     const ShadeableIntersection& isect,
     MediumInteraction* mi,
     const nanovdb::NanoGrid<float>* media_density,
@@ -278,7 +307,7 @@ glm::vec3 Sample_heterogeneous(
 
     Ray localRay; 
     localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
-    localRay.direction = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
+    localRay.direction = glm::normalize(glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f)));
     localRay.direction_inv = 1.0f / localRay.direction;
     float rayTMax = isect.t * glm::length(worldRay.direction);
 
@@ -286,7 +315,7 @@ glm::vec3 Sample_heterogeneous(
     glm::vec3 localBBMin = glm::vec3(0.0f);
     glm::vec3 localBBMax = glm::vec3(1.0f);
     float tMin, tMax, t;
-    if (!aabbIntersectionTest(localBBMin, localBBMax, localRay, tMin, tMax, t)) {
+    if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t, false)) {
         return glm::vec3(1.0f);
     }
 

@@ -450,9 +450,9 @@ int Scene::loadMedium(string mediumid) {
                 // Get accessors for the two grids.Note that accessors only accelerate repeated access!
                 auto dstAcc = grid->getAccessor();
                 // Access and print out a cross-section of the narrow-band level set from the two grids
-                /*for (int i = 0; i < 104; ++i) {
-                    printf("(%3i,0,0) NanoVDB CPU: % -4.2f\n", i, dstAcc.getValue(nanovdb::Coord(i, i, i)));
-                }*/
+                //for (int i = 0; i < 10; ++i) {
+                //    printf("(%3i,0,0) NanoVDB CPU: % 4.2f\n", i, dstAcc.getValue(nanovdb::Coord(i, i, i)));
+                //}
 
                 // load attributes into Medium struct and add to media list
                 auto boundingBox = grid->worldBBox();
@@ -484,11 +484,30 @@ int Scene::loadMedium(string mediumid) {
                     }
                 }   
                 newMedium.invMaxDensity = 1.0f / maxDensity;
-                //std::cout << "Max Density: " << maxDensity << std::endl;
-                //std::cout << "Inv Max Density: " << newMedium.invMaxDensity << std::endl;
+                std::cout << "Max Density: " << maxDensity << std::endl;
+                std::cout << "Inv Max Density: " << newMedium.invMaxDensity << std::endl;
 
                 // TODO: add translate, rotate, scale to Medium specification in scene file (mediumToWorld, inverse() will get worldTomedium)
-                newMedium.worldToMedium = glm::mat4(1.0f);
+                nanovdb::Vec3f diff = nanovdb::Vec3f(aabb_max - aabb_min);
+                glm::vec3 scl = glm::vec3(diff[0], diff[1], diff[2]);
+                glm::mat4 scale_matrix = glm::scale(glm::mat4(), scl);
+
+                glm::vec3 trans = glm::vec3(aabb_min[0], aabb_min[1], aabb_min[2]);
+                glm::mat4 translate_matrix = glm::translate(glm::mat4(), trans);
+
+                newMedium.worldToMedium = glm::inverse(translate_matrix * scale_matrix);
+                std::cout << "World To Medium: " << glm::to_string(newMedium.worldToMedium) << std::endl;
+
+                glm::vec4 aabb_min_v4 = glm::vec4(aabb_min[0], aabb_min[1], aabb_min[2], 1.0);
+                glm::vec4 aabb_max_v4 = glm::vec4(aabb_max[0], aabb_max[1], aabb_max[2], 1.0);
+                glm::vec3 transformed_aabb_min = glm::vec3(newMedium.worldToMedium * aabb_min_v4);
+                glm::vec3 transformed_aabb_max = glm::vec3(newMedium.worldToMedium * aabb_max_v4);
+
+                /*std::cout << "Transformed Min Before: " << glm::to_string(aabb_min_v4) << std::endl;
+                std::cout << "Transformed Min After: " << glm::to_string(transformed_aabb_min) << std::endl;
+
+                std::cout << "Transformed Max Before: " << glm::to_string(aabb_max_v4) << std::endl;
+                std::cout << "Transformed Max After: " << glm::to_string(transformed_aabb_max) << std::endl;*/
 
                 file.close();
             }

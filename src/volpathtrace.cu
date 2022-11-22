@@ -416,18 +416,18 @@ __global__ void computeIntersections_Vol(
 
 			const Medium& medium = media[j];
 			float tMin, tMax;
-			//bool intersectAABB = aabbIntersectionTest(medium.aabb_min, medium.aabb_max, pathSegments[path_index].ray, tMin, tMax, t);
+			bool intersectAABB = aabbIntersectionTest(pathSegments[path_index], medium.aabb_min, medium.aabb_max, pathSegments[path_index].ray, tMin, tMax, t, false);
 
-			//if (intersectAABB && isect.t > t) {
-			//	//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 1.0);
-			//	isect.t = t;
-			//	isect.materialId = -1;
-			//	isect.surfaceNormal = glm::vec3(0.0f);
+			if (intersectAABB && isect.t > t) {
+				//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 1.0);
+				isect.t = t;
+				isect.materialId = -1;
+				isect.surfaceNormal = glm::vec3(0.0f);
 
-			//	// TODO: change this to handle more advanced cases
-			//	isect.mediumInterface.inside = j;
-			//	isect.mediumInterface.outside = -1;
-			//}
+				// TODO: change this to handle more advanced cases
+				isect.mediumInterface.inside = j;
+				isect.mediumInterface.outside = -1;
+			}
 		}
 
 		if (isect.t >= MAX_INTERSECT_DIST) {
@@ -609,10 +609,11 @@ __global__ void computeVisVolumetric(
 	, int geoms_size
 	, Tri* tris
 	, int tris_size
+	, Medium* media
+	, int media_size
 	, MISLightIntersection* direct_light_intersections
 	, BVHNode_GPU* bvh_nodes
-	, Medium* media,
-	const nanovdb::NanoGrid<float>* media_density
+	, const nanovdb::NanoGrid<float>* media_density
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -628,7 +629,7 @@ __global__ void computeVisVolumetric(
 		else if (pathSegments[path_index].prev_hit_null_material) {
 			return;
 		}
-		
+
 		MISLightRay r = direct_light_rays[path_index];
 		MISLightIntersection isect = direct_light_intersections[path_index];
 
@@ -637,12 +638,18 @@ __global__ void computeVisVolumetric(
 		
 		glm::vec3 Tr = glm::vec3(1.0f);
 
+		int num_iters = 0;
+
 		while (true) {
+			
+
 			// Surface Intersection
 			float t_min = MAX_INTERSECT_DIST;
 			int obj_ID = -1;
 			float t;
+			float tMin, tMax;
 			glm::vec3 tmp_normal;
+			int mat_id = -1;
 
 #ifdef ENABLE_TRIS
 			if (tris_size != 0) {
@@ -699,6 +706,7 @@ __global__ void computeVisVolumetric(
 									s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
 									t_min = t;
 									tmp_normal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
+									mat_id = tri.mat_ID;
 									// Check if surface is medium transition
 									if (IsMediumTransition(tri.mediumInterface)) {
 										isect.mediumInterface = tri.mediumInterface;
@@ -760,6 +768,7 @@ __global__ void computeVisVolumetric(
 				{
 					t_min = t;
 					obj_ID = i;
+					mat_id = geom.materialid;
 
 					// Check if surface is medium transition
 					if (IsMediumTransition(geom.mediumInterface)) {
@@ -772,9 +781,30 @@ __global__ void computeVisVolumetric(
 				}
 			}
 
+			for (int j = 0; j < media_size; j++) {
+				if (media[j].type == HOMOGENEOUS) continue;
 
-			// if intersected object is not a "invisible" bounding box, the ray is occluded
-			if (obj_ID == -1 || (obj_ID != -1 && obj_ID != r.light_ID /* TODO: && !is_bounding_box */)) {
+				const Medium& medium = media[j];
+				bool intersectAABB = aabbIntersectionTest(pathSegments[path_index], medium.aabb_min, medium.aabb_max, r.ray, tMin, tMax, t, false);
+
+				if (intersectAABB && t_min > t) {
+					t_min = t;
+					obj_ID = -2;
+					mat_id = -1;
+
+					// TODO: change this to handle more advanced cases
+					isect.mediumInterface.inside = j;
+					isect.mediumInterface.outside = -1;
+				}
+			}
+
+			if (num_iters >= 2) {
+				//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+			}
+
+			// if we did not intersect an object or intersected object is not a "invisible" bounding box, the ray is occluded
+			if (obj_ID == -1 || (obj_ID != -1 && obj_ID != r.light_ID && mat_id != -1)) {
+				num_iters++;
 				direct_light_intersections[path_index].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
 				return;
 			}
@@ -782,27 +812,38 @@ __global__ void computeVisVolumetric(
 			// if the current ray has a medium, then attenuate throughput based on transmission and distance traveled
 			if (r.medium != -1) {
 				if (media[r.medium].type == HOMOGENEOUS) {
+					//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
 					Tr *= Tr_homogeneous(media[r.medium], r.ray, t_min);
 				}
 				else {
-					Tr *= Tr_heterogeneous(media[r.medium], r, media_density, t_min, rng, u01);
+					//pathSegments[path_index].accumulatedIrradiance += glm::vec3(0, 0, 1);
+					glm::vec3 this_tr = Tr_heterogeneous(media[r.medium], pathSegments[path_index], r, media_density, t_min, rng, u01);
+					//pathSegments[path_index].accumulatedIrradiance += this_tr;
+					Tr *= this_tr;
+					if (r.medium == 0 && num_iters == 2) {
+						//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+					}
 				}
 			}
 
 			// if the intersected object IS the light source we selected, we are done
 			if (obj_ID == r.light_ID) {
+				num_iters++;
 				direct_light_intersections[path_index].LTE *= Tr;
+				//pathSegments[path_index].accumulatedIrradiance += glm::vec3(0, 0, 1);
 				return;
 			}
 
-			
+			num_iters++;
 			// We encountered a bounding box/entry/exit of a volume, so we must change our medium value, update the origin, and traverse again
 			glm::vec3 old_origin = r.ray.origin;
-			r.ray.origin = old_origin + (r.ray.direction * t_min);
-			// TODO: maybe change ray direction
+			r.ray.origin = old_origin + (r.ray.direction * (t_min + 0.01f));
 
-			r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
-				isect.mediumInterface.inside;
+			// TODO: generalize to support both homogeneous and heterogeneous volumes
+			/*r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
+				isect.mediumInterface.inside;*/
+			r.medium = insideMedium(pathSegments[path_index], tMin, tMax, num_iters) ? isect.mediumInterface.inside : isect.mediumInterface.outside;
+			//r.medium = -1;
 		}
 	}
 }
@@ -1190,9 +1231,10 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			hst_scene->geoms.size(),
 			dev_tris,
 			hst_scene->num_tris,
+			dev_media,
+			hst_scene->media.size(),
 			dev_direct_light_isects,
 			dev_bvh_nodes,
-			dev_media,
 			dev_media_density
 			);
 				

@@ -140,7 +140,7 @@ inline __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, glm::vec3 &
     return glm::length(r.origin - glm::vec3(sphere.transform * glm::vec4(objspaceIntersection, 1.0f)));
 }
 
-inline __host__ __device__ bool aabbIntersectionTest(const glm::vec3& aabbMin, const glm::vec3& aabbMax, Ray& r, float& tMin, float& tMax, float& t) {
+inline __host__ __device__ bool aabbIntersectionTest(PathSegment& segment, const glm::vec3& aabbMin, const glm::vec3& aabbMax, Ray& r, float& tMin, float& tMax, float& t, bool tr_func) {
     float x1 = (aabbMin.x - r.origin.x) * r.direction_inv.x;
     float x2 = (aabbMax.x - r.origin.x) * r.direction_inv.x;
 
@@ -160,8 +160,34 @@ inline __host__ __device__ bool aabbIntersectionTest(const glm::vec3& aabbMin, c
     tMax = glm::min(tMax, glm::max(z1, z2));
 
     bool intersect = tMin <= tMax && tMax >= 0;
-    t = (intersect) ? tMin : -1.0;
-    if (t < 0.0f) t = tMax;
+    //t = (intersect) ? tMin : -1.0;
+    //if (t < 0.0f) t = tMax;
+
+    if (tMin < 0 && tMax < 0) {
+        //if (tr_func) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+    }
+
+    if (intersect) {
+        //if (tr_func) segment.accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
+        t = tMin;
+    }
+    else {
+        //if (tr_func) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+        t = MAX_INTERSECT_DIST;
+    }
+
+    if (t < 0.0f) {
+        t = tMax;
+    }
 
     return intersect;
+}
+
+inline __host__ __device__ bool insideMedium(PathSegment& segment, const float tMin, const float tMax, const int num_iters) {
+    bool intersect = tMin <= tMax && tMax >= 0;
+    if (intersect && tMin >= 0.0 && num_iters == 0) {
+        segment.accumulatedIrradiance += glm::vec3(0, 0, 1);
+    }
+    return intersect && tMin >= 0.0;
+    //return tMin < 0.0 && tMax >= 0;
 }
