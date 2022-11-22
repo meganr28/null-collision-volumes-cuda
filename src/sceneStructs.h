@@ -21,6 +21,8 @@ enum MediumType {
 struct Medium {
     MediumType type;         // Homogeneous or heterogeneous
     glm::mat4 worldToMedium; // Transform to local medium space
+    glm::vec3 aabb_min;      // Minimum of aabb
+    glm::vec3 aabb_max;      // Maximum of aabb
     glm::vec3 sigma_a;       // Absorption coefficient
     glm::vec3 sigma_s;       // Scattering coefficient
     glm::vec3 sigma_t;       // Extinction

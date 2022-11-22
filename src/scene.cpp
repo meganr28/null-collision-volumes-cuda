@@ -457,14 +457,19 @@ int Scene::loadMedium(string mediumid) {
                 // load attributes into Medium struct and add to media list
                 auto boundingBox = grid->worldBBox();
                 auto gridDim = boundingBox.dim();
+                nanovdb::Vec3R aabb_min = boundingBox.min();
+                nanovdb::Vec3R aabb_max = boundingBox.max();
+
+                newMedium.aabb_min = glm::vec3(aabb_min[0], aabb_min[1], aabb_min[2]);
+                newMedium.aabb_max = glm::vec3(aabb_max[0], aabb_max[1], aabb_max[2]);
                 
                 // Cell count in x, y, z
-                nanovdb::Vec3f gridExtent = nanovdb::Vec3f(boundingBox.max() - boundingBox.min()) / nanovdb::Vec3f(grid->voxelSize());
+                nanovdb::Vec3f gridExtent = nanovdb::Vec3f(aabb_max - aabb_min) / nanovdb::Vec3f(grid->voxelSize());
                 newMedium.gx = gridExtent[0];
                 newMedium.gy = gridExtent[1];
                 newMedium.gz = gridExtent[2];
-                //std::cout << "Fog Volume Sphere Min: " << boundingBox.min()[0] << " " << boundingBox.min()[1] << " " << boundingBox.min()[2] << std::endl;
-                //std::cout << "Fog Volume Sphere Max: " << boundingBox.max()[0] << " " << boundingBox.max()[1] << " " << boundingBox.max()[2] << std::endl;
+                std::cout << "Fog Volume Sphere Min: " << newMedium.aabb_min[0] << " " << newMedium.aabb_min[1] << " " << newMedium.aabb_min[2] << std::endl;
+                std::cout << "Fog Volume Sphere Max: " << newMedium.aabb_max[0] << " " << newMedium.aabb_max[1] << " " << newMedium.aabb_max[2] << std::endl;
                 //std::cout << "Voxel Size: " << grid->voxelSize()[0] << " " << grid->voxelSize()[1] << " " << grid->voxelSize()[2] << std::endl;
                 //std::cout << "Fog Volume Sphere Extent: " << gridExtent[0] << " " << gridExtent[1] << " " << gridExtent[2] << std::endl;
 

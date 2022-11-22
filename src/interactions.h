@@ -207,7 +207,7 @@ inline __host__ __device__ glm::vec3 Tr_heterogeneous(
     glm::vec3 localBBMin = glm::vec3(0.0f);
     glm::vec3 localBBMax = glm::vec3(1.0f);
     float tMin, tMax;
-    if (!aabbIntersectionTest(localBBMin, localBBMax, localRay, tMin, tMax)) {
+    if (!aabbIntersectionTest(localBBMin, localBBMax, localRay, tMin, tMax, t)) {
         return glm::vec3(1.0f);
     }
 
@@ -285,13 +285,13 @@ glm::vec3 Sample_heterogeneous(
     // Compute tmin and tmax of ray overlap with medium bounds
     glm::vec3 localBBMin = glm::vec3(0.0f);
     glm::vec3 localBBMax = glm::vec3(1.0f);
-    float tMin, tMax;
-    if (!aabbIntersectionTest(localBBMin, localBBMax, localRay, tMin, tMax)) {
+    float tMin, tMax, t;
+    if (!aabbIntersectionTest(localBBMin, localBBMax, localRay, tMin, tMax, t)) {
         return glm::vec3(1.0f);
     }
 
     // Run delta tracking to sample medium interaction
-    float t = tMin;
+    t = tMin;
     glm::vec3 samplePoint = localRay.origin + t * localRay.direction;
     while (true) {
         t = -glm::log(1.0f - u01(rng)) * medium.invMaxDensity / medium.sigma_t[0]; // TODO: sigma_t is a float for heterogeneous medium

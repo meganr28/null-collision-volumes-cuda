@@ -46,24 +46,17 @@ ABSORPTION 0.06
 SCATTERING 0.09
 ASYM_G     0.01
 
-// Homogeneous medium
-MEDIUM 1
-homogeneous
-ABSORPTION 0.09
-SCATTERING 0.05
-ASYM_G     0.1
-
 // Camera
 CAMERA
 RES         512 512
 FOVY        19.5
 ITERATIONS  5000
-DEPTH       16
+DEPTH       1
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
 MEDIUM      -1
-EYE         0.0 2.5 18
+EYE         0.0 2.5 30
 LOOKAT      0 2.5 0
 UP          0 1 0
 
@@ -130,12 +123,3 @@ mediuminterface -1 -1
 TRANS       0 2.5 5
 ROTAT       180 0 0
 SCALE       10 10 10
-
-// long cube
-OBJECT 7
-cube
-material -1
-mediuminterface 1 -1
-TRANS       0 2 0
-ROTAT       0 0 0
-SCALE       5 5 5

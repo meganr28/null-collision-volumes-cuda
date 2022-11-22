@@ -255,6 +255,8 @@ __global__ void computeIntersections_Vol(
 	, int geoms_size
 	, Tri* tris
 	, int tris_size
+	, Medium* media
+	, int media_size
 	, ShadeableIntersection* intersections
 	, BVHNode_GPU* bvh_nodes
 )
@@ -272,8 +274,6 @@ __global__ void computeIntersections_Vol(
 		isect.t = MAX_INTERSECT_DIST;
 
 		float t;
-
-
 		glm::vec3 tmp_normal;
 		int obj_ID = -1;
 
@@ -368,15 +368,12 @@ __global__ void computeIntersections_Vol(
 					cur_node_index = node_stack[stack_pointer];
 				}
 			}
-	}
+		}
 #endif
-
 
 		for (int i = 0; i < geoms_size; ++i)
 		{
 			Geom& geom = geoms[i];
-
-
 
 			if (geom.type == SPHERE) {
 #ifdef ENABLE_SPHERES
@@ -412,6 +409,25 @@ __global__ void computeIntersections_Vol(
 				}
 			}
 			
+		}
+
+		for (int j = 0; j < media_size; j++) {
+			if (media[j].type == HOMOGENEOUS) continue;
+
+			const Medium& medium = media[j];
+			float tMin, tMax;
+			//bool intersectAABB = aabbIntersectionTest(medium.aabb_min, medium.aabb_max, pathSegments[path_index].ray, tMin, tMax, t);
+
+			//if (intersectAABB && isect.t > t) {
+			//	//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 1.0);
+			//	isect.t = t;
+			//	isect.materialId = -1;
+			//	isect.surfaceNormal = glm::vec3(0.0f);
+
+			//	// TODO: change this to handle more advanced cases
+			//	isect.mediumInterface.inside = j;
+			//	isect.mediumInterface.outside = -1;
+			//}
 		}
 
 		if (isect.t >= MAX_INTERSECT_DIST) {
@@ -1121,6 +1137,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			, hst_scene->geoms.size()
 			, dev_tris
 			, hst_scene->num_tris
+			, dev_media
+			, hst_scene->media.size()
 			, dev_intersections
 			, dev_bvh_nodes
 			);
