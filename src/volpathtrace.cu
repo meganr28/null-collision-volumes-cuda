@@ -798,10 +798,6 @@ __global__ void computeVisVolumetric(
 				}
 			}
 
-			if (num_iters >= 2) {
-				//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-			}
-
 			// if we did not intersect an object or intersected object is not a "invisible" bounding box, the ray is occluded
 			if (obj_ID == -1 || (obj_ID != -1 && obj_ID != r.light_ID && mat_id != -1)) {
 				num_iters++;
@@ -812,17 +808,10 @@ __global__ void computeVisVolumetric(
 			// if the current ray has a medium, then attenuate throughput based on transmission and distance traveled
 			if (r.medium != -1) {
 				if (media[r.medium].type == HOMOGENEOUS) {
-					//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
 					Tr *= Tr_homogeneous(media[r.medium], r.ray, t_min);
 				}
 				else {
-					//pathSegments[path_index].accumulatedIrradiance += glm::vec3(0, 0, 1);
-					glm::vec3 this_tr = Tr_heterogeneous(media[r.medium], pathSegments[path_index], r, media_density, t_min, rng, u01);
-					//pathSegments[path_index].accumulatedIrradiance += this_tr;
-					Tr *= this_tr;
-					if (r.medium == 0 && num_iters == 2) {
-						//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-					}
+					Tr *= Tr_heterogeneous(media[r.medium], pathSegments[path_index], r, media_density, t_min, rng, u01);
 				}
 			}
 
@@ -830,7 +819,6 @@ __global__ void computeVisVolumetric(
 			if (obj_ID == r.light_ID) {
 				num_iters++;
 				direct_light_intersections[path_index].LTE *= Tr;
-				//pathSegments[path_index].accumulatedIrradiance += glm::vec3(0, 0, 1);
 				return;
 			}
 
@@ -843,7 +831,6 @@ __global__ void computeVisVolumetric(
 			/*r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
 				isect.mediumInterface.inside;*/
 			r.medium = insideMedium(pathSegments[path_index], tMin, tMax, num_iters) ? isect.mediumInterface.inside : isect.mediumInterface.outside;
-			//r.medium = -1;
 		}
 	}
 }
@@ -888,7 +875,7 @@ __global__ void mediumSpawnPathSegment(
 		pathSegments[idx].ray.direction = wi;
 		pathSegments[idx].ray.direction_inv = 1.0f / wi;
 		pathSegments[idx].ray.origin = intersection.mi.samplePoint + (wi * 0.001f);
-		// TRY: Assert(mediumInterface.inside == mediumInterface.outside);
+		// TODO TRY: Assert(mediumInterface.inside == mediumInterface.outside);
 		//pathSegments[idx].medium = pathSegments[idx].medium;
 		pathSegments[idx].medium = intersection.mi.medium;
 		pathSegments[idx].remainingBounces--;

@@ -155,6 +155,7 @@ float Sample_p(const glm::vec3& wo, glm::vec3* wi, const glm::vec2& u, float g)
 
 inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_index)
 {
+    // read density value from the grid
     glm::vec3 min_cell_index = glm::vec3(0, 0, 0);
     glm::vec3 max_cell_index = glm::vec3(medium.gx, medium.gy, medium.gz);
     if (sample_index.x < min_cell_index.x || sample_index.x >= max_cell_index.x ||
@@ -168,11 +169,12 @@ inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nan
 
 inline __host__ __device__ float Density_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_point)
 {
+    // find the sample point's voxel
     glm::vec3 pSamples(sample_point.x * medium.gx - 0.5f, sample_point.y * medium.gy - 0.5f, sample_point.z * medium.gz - 0.5f);
     glm::vec3 pi = glm::floor(pSamples);
     glm::vec3 d = pSamples - pi;
 
-    // trilinear sampling of denisty values nearest to sampling point
+    // trilinear sampling of density values nearest to sampling point
     float d00 = glm::mix(D_heterogeneous(medium, media_density, pi), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 0)), d.x);
     float d10 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 0)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 0)), d.x);
     float d01 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 0, 1)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 1)), d.x);
@@ -189,7 +191,7 @@ inline __host__ __device__ glm::vec3 Tr_homogeneous(const Medium& medium, const 
 
 inline __host__ __device__ glm::vec3 Tr_heterogeneous(
     const Medium& medium, 
-    PathSegment& segment, // TODO: REMOVE AFTER DEBUGGING
+    PathSegment& segment, // TODO: Remove this from all functions after debugging
     const MISLightRay& mis_ray, 
     const nanovdb::NanoGrid<float>* media_density,
     float t,
@@ -210,47 +212,23 @@ inline __host__ __device__ glm::vec3 Tr_heterogeneous(
     glm::vec3 localBBMax = glm::vec3(1.0f);
     float tMin, tMax, t_intersect;
     if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t_intersect, true)) {
-        //segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
         return glm::vec3(1.0f);
     }
     
-    //segment.accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
     int num_iters = 0;
     float Tr = 1.0f;
     t = tMin;
     glm::vec3 samplePoint = localRay.origin + t * localRay.direction;
     while (true) {
         t -= glm::log(1.0f - u01(rng)) * medium.invMaxDensity / medium.sigma_t[0];  // TODO: sigma_t is a float for heterogeneous medium
-        /*float t_inc = glm::log(1.0f - u01(rng)) * medium.invMaxDensity / medium.sigma_t[0];
-        if (num_iters == 0 && t_inc > 0) {
-            segment.accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
-        }*/
         if (t >= tMax) {
-            if (num_iters == 0) {
-                //segment.accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
-            }
             break;
         }
-        samplePoint = localRay.origin + t * localRay.direction;
-        
-        if (num_iters == 0) {
-            //segment.accumulatedIrradiance += glm::vec3(0.0, 0.0, 0.0);
-        }
-        float density = Density_heterogeneous(medium, media_density, samplePoint);
-        if (num_iters == 0) {
-            
-            if (density > 0.149 && density < 0.151) {
-                //segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-            }
-            else {
-                //segment.accumulatedIrradiance += glm::vec3(1.0, 1.0, 0.0);
-            }
 
-        }
+        samplePoint = localRay.origin + t * localRay.direction;
+        float density = Density_heterogeneous(medium, media_density, samplePoint);
         Tr *= 1.0 - glm::max(0.0f, density * medium.invMaxDensity);
-        //segment.accumulatedIrradiance += density;
         num_iters++;
-        //break;
     }
     return glm::vec3(Tr);
 }

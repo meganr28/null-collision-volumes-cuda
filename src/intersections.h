@@ -160,34 +160,13 @@ inline __host__ __device__ bool aabbIntersectionTest(PathSegment& segment, const
     tMax = glm::min(tMax, glm::max(z1, z2));
 
     bool intersect = tMin <= tMax && tMax >= 0;
-    //t = (intersect) ? tMin : -1.0;
-    //if (t < 0.0f) t = tMax;
-
-    if (tMin < 0 && tMax < 0) {
-        //if (tr_func) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-    }
-
-    if (intersect) {
-        //if (tr_func) segment.accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
-        t = tMin;
-    }
-    else {
-        //if (tr_func) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-        t = MAX_INTERSECT_DIST;
-    }
-
-    if (t < 0.0f) {
-        t = tMax;
-    }
+    t = (intersect) ? tMin : MAX_INTERSECT_DIST;
+    if (t < 0.0f) t = tMax;
 
     return intersect;
 }
 
 inline __host__ __device__ bool insideMedium(PathSegment& segment, const float tMin, const float tMax, const int num_iters) {
     bool intersect = tMin <= tMax && tMax >= 0;
-    if (intersect && tMin >= 0.0 && num_iters == 0) {
-        segment.accumulatedIrradiance += glm::vec3(0, 0, 1);
-    }
     return intersect && tMin >= 0.0;
-    //return tMin < 0.0 && tMax >= 0;
 }
