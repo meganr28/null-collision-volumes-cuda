@@ -203,7 +203,7 @@ inline __host__ __device__ glm::vec3 Tr_heterogeneous(
 
     Ray localRay;
     localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
-    localRay.direction = glm::normalize(glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f)));
+    localRay.direction = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f));
     localRay.direction_inv = 1.0f / localRay.direction;
     float rayTMax = t * glm::length(worldRay.direction); // TODO: use rayTMax in computation?
 
@@ -211,7 +211,7 @@ inline __host__ __device__ glm::vec3 Tr_heterogeneous(
     glm::vec3 localBBMin = glm::vec3(0.0f);
     glm::vec3 localBBMax = glm::vec3(1.0f);
     float tMin, tMax, t_intersect;
-    if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t_intersect, true)) {
+    if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t_intersect, false)) {
         return glm::vec3(1.0f);
     }
     
@@ -285,7 +285,7 @@ glm::vec3 Sample_heterogeneous(
 
     Ray localRay; 
     localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
-    localRay.direction = glm::normalize(glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f)));
+    localRay.direction = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f));
     localRay.direction_inv = 1.0f / localRay.direction;
     float rayTMax = isect.t * glm::length(worldRay.direction);
 

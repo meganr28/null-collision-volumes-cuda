@@ -419,7 +419,6 @@ __global__ void computeIntersections_Vol(
 			bool intersectAABB = aabbIntersectionTest(pathSegments[path_index], medium.aabb_min, medium.aabb_max, pathSegments[path_index].ray, tMin, tMax, t, false);
 
 			if (intersectAABB && isect.t > t) {
-				//pathSegments[path_index].accumulatedIrradiance += glm::vec3(1.0, 0.0, 1.0);
 				isect.t = t;
 				isect.materialId = -1;
 				isect.surfaceNormal = glm::vec3(0.0f);
@@ -550,6 +549,7 @@ __global__ void generateSurfaceDirectLightSample(
 			return;
 		}
 
+		
 		ShadeableIntersection intersection = intersections[idx];
 
 		if (intersection.materialId < 0) {
@@ -848,6 +848,7 @@ __global__ void mediumSpawnPathSegment(
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
 	{
+		
 		if (pathSegments[idx].remainingBounces == 0) {
 			return;
 		}
@@ -905,6 +906,8 @@ __global__ void surfaceSpawnPathSegment(
 			pathSegments[idx].prev_hit_null_material = false;
 			return;
 		}
+
+		//pathSegments[idx].accumulatedIrradiance += glm::vec3(0, 0, 1);
 
 		ShadeableIntersection intersection = intersections[idx];
 		MISLightIntersection direct_light_intersection = direct_light_isects[idx];

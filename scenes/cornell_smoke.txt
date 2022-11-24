@@ -1,10 +1,10 @@
 // Emissive material (light)
 MATERIAL 		0
-R_COLOR        	40 30 15
+R_COLOR        	10 20 45
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	6
+EMITTANCE   	50
 
 // Diffuse white
 MATERIAL 1
@@ -42,9 +42,9 @@ EMITTANCE   	0
 MEDIUM 0
 heterogeneous
 ../scenes/vdb/smoke.vdb
-ABSORPTION 0.39
-SCATTERING 0.27
-ASYM_G     0.01
+ABSORPTION 0.009
+SCATTERING 0.005
+ASYM_G     0.001
 
 // Camera
 CAMERA

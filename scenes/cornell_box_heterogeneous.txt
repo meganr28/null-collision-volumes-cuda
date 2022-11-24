@@ -42,13 +42,13 @@ EMITTANCE   	0
 MEDIUM 0
 heterogeneous
 ../scenes/vdb/cube.vdb
-ABSORPTION 4.9
-SCATTERING 0.7
+ABSORPTION 0.55
+SCATTERING 0.34
 ASYM_G     0.01
 
 // Camera
 CAMERA
-RES         512 512
+RES         1024 1024
 FOVY        19.5
 ITERATIONS  10000
 DEPTH       8
