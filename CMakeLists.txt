@@ -77,6 +77,7 @@ set(headers
     src/ImGui/imconfig.h
     src/lbvh.h
     src/volpathtrace.h
+    src/fullvolpathtrace.h
 	
 	src/ImGui/imgui.h
     src/ImGui/imconfig.h
@@ -100,6 +101,7 @@ set(sources
     src/utilities.cpp
     src/lbvh.cu
     src/volpathtrace.cu
+    src/fullvolpathtrace.cu
 	
     src/ImGui/imgui.cpp 
       src/ImGui/imgui_demo.cpp 
