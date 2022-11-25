@@ -496,12 +496,39 @@ __global__ void generateMediumDirectLightSample_FullVol(
 		if (pathSegments[idx].remainingBounces == 0) {
 			return;
 		}
-		if (intersections[idx].mi.medium == -1) {
-			return;
-		}
 
 		ShadeableIntersection intersection = intersections[idx];
+
+		if (intersections[idx].mi.medium == -1) {
+			if (intersection.materialId < 0) {
+				// Change ray direction
+				pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
+				pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
+					intersection.mediumInterface.inside;
+				pathSegments[idx].remainingBounces--;
+				pathSegments[idx].prev_hit_null_material = true;
+				return;
+			}
+		}
+
 		Material material = materials[intersection.materialId];
+	
+		if (intersections[idx].mi.medium == -1) {
+			if (material.emittance > 0.0f) {
+				if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
+					// only color lights on first hit
+					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
+				}
+				pathSegments[idx].remainingBounces = 0;
+				return;
+			}
+
+			pathSegments[idx].prev_hit_was_specular = material.type == SPEC_BRDF || material.type == SPEC_BTDF || material.type == SPEC_GLASS;
+
+			if (pathSegments[idx].prev_hit_was_specular) {
+				return;
+			}
+		}
 
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
@@ -523,83 +550,6 @@ __global__ void generateMediumDirectLightSample_FullVol(
 			u01);
 	}
 }
-
-// kernel to handle interactions within a surface (instead of medium)
-__global__ void generateSurfaceDirectLightSample_FullVol(
-	int num_paths,
-	int max_depth,
-	PathSegment* pathSegments,
-	Material* materials,
-	ShadeableIntersection* intersections,
-	Medium* media,
-	MISLightRay* direct_light_rays,
-	MISLightIntersection* direct_light_isects,
-	Light* lights,
-	int num_lights,
-	Geom* geoms
-)
-{
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if (idx < num_paths)
-	{
-		if (pathSegments[idx].remainingBounces == 0) {
-			return;
-		}
-		if (intersections[idx].mi.medium >= 0) {
-			return;
-		}
-
-		
-		ShadeableIntersection intersection = intersections[idx];
-
-		if (intersection.materialId < 0) {
-			// Change ray direction
-			pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
-			pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
-			intersection.mediumInterface.inside;
-			pathSegments[idx].remainingBounces--;
-			pathSegments[idx].prev_hit_null_material = true;
-			return;
-		}
-
-		Material material = materials[intersection.materialId];
-
-		if (material.emittance > 0.0f) {
-			if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
-				// only color lights on first hit
-				pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
-			}
-			pathSegments[idx].remainingBounces = 0;
-			return;
-		}
-
-		pathSegments[idx].prev_hit_was_specular = material.type == SPEC_BRDF || material.type == SPEC_BTDF || material.type == SPEC_GLASS;
-
-		if (pathSegments[idx].prev_hit_was_specular) {
-			return;
-		}
-
-		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
-		thrust::uniform_real_distribution<float> u01(0.0, 1.0);
-
-		// TODO: Check surface intersection bsdf doesn't exist
-		computeDirectLightSamplePreVis(
-			idx,
-			pathSegments,
-			material,
-			materials,
-			intersection,
-			media,
-			direct_light_rays,
-			direct_light_isects,
-			lights,
-			num_lights,
-			geoms,
-			rng,
-			u01);
-	}
-}
-
 
 __global__ void computeVisVolumetric_FullVol(
 	int num_paths
@@ -857,11 +807,11 @@ __global__ void mediumSpawnPathSegment_FullVol(
 		if (pathSegments[idx].remainingBounces == 0) {
 			return;
 		}
-		else if (intersections[idx].mi.medium == -1) {
-			return;
-		}
 		else if (pathSegments[idx].prev_hit_null_material) {
 			pathSegments[idx].prev_hit_null_material = false;
+			return;
+		}
+		else if (intersections[idx].mi.medium == -1) {
 			return;
 		}
 
@@ -870,12 +820,10 @@ __global__ void mediumSpawnPathSegment_FullVol(
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 
-
 		pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
 		glm::vec3 wo = -pathSegments[idx].ray.direction;
 		glm::vec3 wi;
 		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
-
 
 		// Create new ray
 		pathSegments[idx].ray.direction = wi;
@@ -884,159 +832,6 @@ __global__ void mediumSpawnPathSegment_FullVol(
 		// TODO TRY: Assert(mediumInterface.inside == mediumInterface.outside);
 		//pathSegments[idx].medium = pathSegments[idx].medium;
 		pathSegments[idx].medium = intersection.mi.medium;
-		pathSegments[idx].remainingBounces--;
-	}
-}
-
-__global__ void surfaceSpawnPathSegment_FullVol(
-	int iter
-	, int num_paths
-	, ShadeableIntersection* intersections
-	, MISLightIntersection* direct_light_isects
-	, int num_lights
-	, PathSegment* pathSegments
-	, Material* materials
-	, Medium* media) {
-
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if (idx < num_paths)
-	{
-		if (pathSegments[idx].remainingBounces == 0) {
-			return;
-		}
-		if (intersections[idx].mi.medium >= 0) {
-			return;
-		}
-		else if (pathSegments[idx].prev_hit_null_material) {
-			pathSegments[idx].prev_hit_null_material = false;
-			return;
-		}
-
-		//pathSegments[idx].accumulatedIrradiance += glm::vec3(0, 0, 1);
-
-		ShadeableIntersection intersection = intersections[idx];
-		MISLightIntersection direct_light_intersection = direct_light_isects[idx];
-
-		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
-		thrust::uniform_real_distribution<float> u01(0.0, 1.0);
-
-		Material m = materials[intersection.materialId];
-
-		glm::vec3 intersect_point = pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction;
-
-		if (!pathSegments[idx].prev_hit_was_specular) {
-			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
-		}
-		glm::vec3 wi = glm::vec3(0.0f);
-		glm::vec3 f = glm::vec3(0.0f);
-		float pdf = 0.0f;
-		float absDot = 0.0f;
-
-		//thrust::uniform_real_distribution<float> u01(0, 1);
-
-		// Physically based BSDF sampling influenced by PBRT
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
-
-		if (m.type == SPEC_BRDF) {
-			wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = m.R;
-			}
-			else {
-				f = m.R / absDot;
-			}
-		}
-		else if (m.type == SPEC_BTDF) {
-			// spec refl
-			float eta = m.ior;
-			if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0001f) {
-				// outside
-				eta = 1.0f / eta;
-				wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-			}
-			else {
-				// inside
-				wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (glm::length(wi) <= 0.0001f) {
-				// total internal reflection
-				f = glm::vec3(0.0f);
-			}
-			else if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = m.T;
-			}
-			else {
-				f = m.T / absDot;
-			}
-		}
-		else if (m.type == SPEC_GLASS) {
-			// spec glass
-			float eta = m.ior;
-			if (u01(rng) < 0.5f) {
-				// spec refl
-				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (absDot == 0.0f) {
-					f = m.R;
-				}
-				else {
-					f = m.R / absDot;
-				}
-				f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
-			}
-			else {
-				// spec refr
-				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
-					// outside
-					eta = 1.0f / eta;
-					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-				}
-				else {
-					// inside
-					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-				}
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (glm::length(wi) <= 0.0001f) {
-					// total internal reflection
-					f = glm::vec3(0.0f);
-				}
-				if (absDot == 0.0f) {
-					f = m.T;
-				}
-				else {
-					f = m.T / absDot;
-				}
-				f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
-			}
-			f *= 2.0f;
-		}
-		else {
-			// diffuse
-			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
-			if (m.type == DIFFUSE_BTDF) {
-				wi = -wi;
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = absDot * 0.31831f;
-			f = m.R * 0.31831f;
-		}
-
-		pathSegments[idx].rayThroughput *= f * absDot / pdf;
-
-		// Change ray direction
-		pathSegments[idx].ray.direction = wi;
-		pathSegments[idx].ray.direction_inv = 1.0f / wi;
-		pathSegments[idx].ray.origin = intersect_point + (wi * 0.001f);
-		//pathSegments[idx].medium = intersection.mi.medium;
-		pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
-			intersection.mediumInterface.inside;
 		pathSegments[idx].remainingBounces--;
 	}
 }
@@ -1206,19 +1001,6 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter) {
 			hst_scene->lights.size(),
 			dev_geoms);
 
-		generateSurfaceDirectLightSample_FullVol << < numblocksPathSegmentTracing, blockSize1d >> > (
-			pixelcount_fullvol,
-			traceDepth,
-			dev_paths,
-			dev_materials,
-			dev_intersections,
-			dev_media,
-			dev_direct_light_rays,
-			dev_direct_light_isects,
-			dev_lights,
-			hst_scene->lights.size(),
-			dev_geoms);
-
 		computeVisVolumetric_FullVol << < numblocksPathSegmentTracing, blockSize1d >> > (
 			pixelcount_fullvol,
 			dev_paths,
@@ -1235,16 +1017,6 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter) {
 			);
 				
 		mediumSpawnPathSegment_FullVol << < numblocksPathSegmentTracing, blockSize1d >> > (
-			iter,
-			pixelcount_fullvol,
-			dev_intersections,
-			dev_direct_light_isects,
-			hst_scene->lights.size(),
-			dev_paths,
-			dev_materials,
-			dev_media);
-
-		surfaceSpawnPathSegment_FullVol << < numblocksPathSegmentTracing, blockSize1d >> > (
 			iter,
 			pixelcount_fullvol,
 			dev_intersections,
