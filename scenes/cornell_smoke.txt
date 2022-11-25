@@ -1,10 +1,10 @@
 // Emissive material (light)
 MATERIAL 		0
-R_COLOR        	10 20 45
+R_COLOR        	5 15 45
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	50
+EMITTANCE   	35
 
 // Diffuse white
 MATERIAL 1
@@ -38,13 +38,21 @@ DIFFUSE_BRDF
 IOR    			1.55
 EMITTANCE   	0
 
+// Emissive material (light)
+MATERIAL 		5
+R_COLOR        	45 20 10
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	35
+
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
 ../scenes/vdb/smoke.vdb
-ABSORPTION 0.009
-SCATTERING 0.005
-ASYM_G     0.001
+ABSORPTION 0.0114
+SCATTERING 0.0065
+ASYM_G     0.1
 
 // Camera
 CAMERA
@@ -56,7 +64,7 @@ FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
 MEDIUM      -1
-EYE         0.0 45.5 170
+EYE         0.0 45.5 160
 LOOKAT      0 45 0
 UP          0 1 0
 
@@ -68,4 +76,13 @@ material 0
 mediuminterface -1 -1
 TRANS       0 99.85 0
 ROTAT       90 0 0
+SCALE       8 8 1
+
+// Ceiling light
+OBJECT 1
+squareplane
+material 5
+mediuminterface -1 -1
+TRANS       25 -3.85 0
+ROTAT       90 245 0
 SCALE       8 8 1

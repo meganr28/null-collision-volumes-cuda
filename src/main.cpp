@@ -6,7 +6,8 @@
 #include <cstring>
 
 //#define PATH_INTEGRATOR
-#define VOLUME_INTEGRATOR
+//#define VOLUME_INTEGRATOR
+#define FULL_VOLUME_INTEGRATOR
 
 static std::string startTimeString;
 
@@ -92,6 +93,9 @@ int main(int argc, char** argv) {
 #ifdef VOLUME_INTEGRATOR
 	InitDataContainer_Vol(guiData);
 #endif
+#ifdef FULL_VOLUME_INTEGRATOR
+	InitDataContainer_FullVol(guiData);
+#endif
 
 	// GLFW main loop
 	mainLoop();
@@ -154,6 +158,10 @@ void runCuda() {
 		volPathtraceFree();
 		volPathtraceInit(scene);
 #endif
+#ifdef FULL_VOLUME_INTEGRATOR
+		fullVolPathtraceFree();
+		fullVolPathtraceInit(scene);
+#endif
 	}
 
 	if (iteration < renderState->iterations) {
@@ -168,6 +176,9 @@ void runCuda() {
 #endif
 #ifdef VOLUME_INTEGRATOR
 		volPathtrace(pbo_dptr, frame, iteration);
+#endif
+#ifdef FULL_VOLUME_INTEGRATOR
+		fullVolPathtrace(pbo_dptr, frame, iteration);
 #endif
 		// unmap buffer object
 		cudaGLUnmapBufferObject(pbo);
