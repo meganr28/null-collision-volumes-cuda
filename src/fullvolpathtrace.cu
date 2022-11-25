@@ -441,11 +441,22 @@ __global__ void computeIntersections_FullVol(
 
 __global__ void sampleParticipatingMedium_FullVol(
 	int num_paths,
+	int max_depth,
 	PathSegment* pathSegments,
+	Material* materials,
 	ShadeableIntersection* intersections,
+	Geom* geoms,
+	int geoms_size,
+	Tri* tris,
+	int tris_size,
 	Medium* media,
-	const nanovdb::NanoGrid<float>* media_density
-)
+	int media_size,
+	MISLightRay* direct_light_rays,
+	MISLightIntersection* direct_light_isects,
+	Light* lights,
+	int num_lights,
+	BVHNode_GPU* bvh_nodes,
+	const nanovdb::NanoGrid<float>* media_density)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
@@ -457,6 +468,7 @@ __global__ void sampleParticipatingMedium_FullVol(
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 
+		// If we have a medium, sample participating medium
 		int rayMediumIndex = pathSegments[idx].medium;
 		MediumInteraction mi;
 		mi.medium = -1;
@@ -472,6 +484,55 @@ __global__ void sampleParticipatingMedium_FullVol(
 			pathSegments[idx].remainingBounces = 0;
 		}
 		intersections[idx].mi = mi;
+
+		// Handle surface interaction
+		ShadeableIntersection intersection = intersections[idx];
+
+		if (intersections[idx].mi.medium == -1) {
+			if (intersection.materialId < 0) {
+				// Change ray direction
+				pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
+				pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
+					intersection.mediumInterface.inside;
+				pathSegments[idx].remainingBounces--;
+				pathSegments[idx].prev_hit_null_material = true;
+				return;
+			}
+		}
+
+		Material material = materials[intersection.materialId];
+
+		if (intersections[idx].mi.medium == -1) {
+			if (material.emittance > 0.0f) {
+				if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
+					// only color lights on first hit
+					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
+				}
+				pathSegments[idx].remainingBounces = 0;
+				return;
+			}
+
+			pathSegments[idx].prev_hit_was_specular = material.type == SPEC_BRDF || material.type == SPEC_BTDF || material.type == SPEC_GLASS;
+
+			if (pathSegments[idx].prev_hit_was_specular) {
+				return;
+			}
+		}
+
+		// Handle medium interaction
+		pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput 
+			* directLightSample(idx, pathSegments, materials, intersections[idx], geoms, geoms_size, tris, tris_size,
+				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); // TODO: * uniform sample one light;
+		glm::vec3 wo = -pathSegments[idx].ray.direction;
+		glm::vec3 wi;
+		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
+
+		// Create new ray
+		pathSegments[idx].ray.direction = wi;
+		pathSegments[idx].ray.direction_inv = 1.0f / wi;
+		pathSegments[idx].ray.origin = intersections[idx].mi.samplePoint + (wi * 0.001f);
+		pathSegments[idx].medium = intersections[idx].mi.medium;
+		pathSegments[idx].remainingBounces--;
 	}
 }
 
@@ -979,52 +1040,26 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter) {
 		
 		// Attenuating ray throughput with medium stuff (phase function)
 		// Check if throughput is black, and break out of loop (set remainingBounces to 0)
-		sampleParticipatingMedium_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
-			pixelcount_fullvol,
-			dev_paths,
-			dev_intersections,
-			dev_media,
-			dev_media_density);
-		
 		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distribution
 		// Else, handle surface interaction
-		generateMediumDirectLightSample_FullVol << < numblocksPathSegmentTracing, blockSize1d >> > (
+		sampleParticipatingMedium_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
 			pixelcount_fullvol,
 			traceDepth,
 			dev_paths,
 			dev_materials,
 			dev_intersections,
-			dev_media,
-			dev_direct_light_rays,
-			dev_direct_light_isects,
-			dev_lights,
-			hst_scene->lights.size(),
-			dev_geoms);
-
-		computeVisVolumetric_FullVol << < numblocksPathSegmentTracing, blockSize1d >> > (
-			pixelcount_fullvol,
-			dev_paths,
-			dev_direct_light_rays,
 			dev_geoms,
 			hst_scene->geoms.size(),
 			dev_tris,
 			hst_scene->num_tris,
 			dev_media,
 			hst_scene->media.size(),
+			dev_direct_light_rays,
 			dev_direct_light_isects,
-			dev_bvh_nodes,
-			dev_media_density
-			);
-				
-		mediumSpawnPathSegment_FullVol << < numblocksPathSegmentTracing, blockSize1d >> > (
-			iter,
-			pixelcount_fullvol,
-			dev_intersections,
-			dev_direct_light_isects,
+			dev_lights,
 			hst_scene->lights.size(),
-			dev_paths,
-			dev_materials,
-			dev_media);
+			dev_bvh_nodes,
+			dev_media_density);
 		
 		// RUSSIAN ROULETTE
 		/*if (depth > 4)

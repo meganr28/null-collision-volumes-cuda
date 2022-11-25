@@ -22,7 +22,7 @@ inline __host__ __device__ inline unsigned int utilhash(unsigned int a) {
     return a;
 }
 
-inline __device__ float squareplaneIntersectionTest(Geom& squareplane, Ray& r, glm::vec3& normal) {
+inline __host__ __device__ float squareplaneIntersectionTest(Geom& squareplane, Ray& r, glm::vec3& normal) {
     Ray q;
     q.origin = glm::vec3(squareplane.inverseTransform * glm::vec4(r.origin, 1.0f));
     q.direction = glm::normalize(glm::vec3(squareplane.inverseTransform * glm::vec4(r.direction, 0.0f)));
@@ -49,7 +49,7 @@ inline __device__ float squareplaneIntersectionTest(Geom& squareplane, Ray& r, g
  * @param outside            Output param for whether the ray came from outside.
  * @return                   Ray parameter `t` value. -1 if no intersection.
  */
-inline __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec3 &normal) {
+inline __host__ __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec3 &normal) {
     Ray q;
     q.origin    = glm::vec3(box.inverseTransform *glm::vec4(r.origin   , 1.0f));
     q.direction = glm::normalize(glm::vec3(box.inverseTransform * glm::vec4(r.direction, 0.0f)));
@@ -108,7 +108,7 @@ inline __device__ float boxIntersectionTest(Geom &box, Ray &r, glm::vec3 &normal
  * @param outside            Output param for whether the ray came from outside.
  * @return                   Ray parameter `t` value. -1 if no intersection.
  */
-inline __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, glm::vec3 &normal) {
+inline __host__ __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, glm::vec3 &normal) {
 
     glm::vec3 ro = glm::vec3(sphere.inverseTransform * glm::vec4(r.origin, 1.0f));
     glm::vec3 rd = glm::normalize(glm::vec3(sphere.inverseTransform * glm::vec4(r.direction, 0.0f)));
