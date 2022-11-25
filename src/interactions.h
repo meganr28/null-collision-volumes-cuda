@@ -8,7 +8,11 @@
 
 //#define USE_SCHLICK_APPROX
 
-// CHECKITOUT
+enum MediumEvent {
+    ABSORB,
+    REAL_SCATTER,
+    NULL_SCATTER
+};
 
 inline __host__ __device__ 
 void buildOrthonormalBasis(const glm::vec3& normal, glm::vec3* tangent, glm::vec3* bitangent) {
@@ -164,6 +168,9 @@ inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nan
         return 0;
     auto gpuAcc = media_density->getAccessor();
     auto density = gpuAcc.getValue(nanovdb::Coord(sample_index.x, sample_index.y, sample_index.z));
+    /*if (glm::abs(density) < 0.001f) {
+        density = 0.0f;
+    }*/
     return (density >= 0.0f) ? density : -density;
 }
 
@@ -173,6 +180,7 @@ inline __host__ __device__ float Density_heterogeneous(const Medium& medium, con
     glm::vec3 pSamples(sample_point.x * medium.gx - 0.5f, sample_point.y * medium.gy - 0.5f, sample_point.z * medium.gz - 0.5f);
     glm::vec3 pi = glm::floor(pSamples);
     glm::vec3 d = pSamples - pi;
+    //return D_heterogeneous(medium, media_density, pi);
 
     // trilinear sampling of density values nearest to sampling point
     float d00 = glm::mix(D_heterogeneous(medium, media_density, pi), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 0)), d.x);
@@ -313,6 +321,14 @@ glm::vec3 Sample_heterogeneous(
             mi->medium = mediumIndex;
             return medium.sigma_s / medium.sigma_t;
         }
+        /*if (segment.remainingBounces > 0) {
+            segment.remainingBounces--;
+        }
+        if (segment.remainingBounces == 0) {
+            return glm::vec3(1.0f);
+        }*/
+        
+        
     }
 
     return glm::vec3(1.0f);
@@ -429,5 +445,59 @@ glm::vec3 computeDirectLightSamplePreVis(
 
 }
 
+inline __host__ __device__
+MediumEvent sampleMediumEvent(const Medium& medium, glm::vec4& sigma_maj, float rng_val) {
+
+    float p_absorb = medium.sigma_a[0] / sigma_maj[0];
+    if (p_absorb > rng_val) {
+        return ABSORB;
+    }
+
+    float p_scatter = medium.sigma_s[0] / sigma_maj[0];
+    if (p_scatter + p_absorb > rng_val) {
+        return REAL_SCATTER;
+    }
+    
+    return NULL_SCATTER;
+}
 
 
+inline __host__ __device__
+glm::vec3 SampleT(
+    int max_depth,
+    const Medium& medium,
+    PathSegment& segment,
+    const ShadeableIntersection& isect,
+    MediumInteraction* mi,
+    const nanovdb::NanoGrid<float>* media_density,
+    int mediumIndex,
+    thrust::default_random_engine& rng,
+    thrust::uniform_real_distribution<float>& u01)
+{
+    bool scattered = false;
+    bool terminated = false;
+    glm::vec4 sigma_maj = glm::vec4(1);
+
+    if (glm::length(segment.rayThroughput) <= 0.0f) {
+        terminated = true;
+        return glm::vec3(0.0);
+    }
+
+    // choose a medium event to sample (absorption, real scattering, or null scattering
+    MediumEvent medium_event = sampleMediumEvent(medium, sigma_maj, u01(rng));
+    if (medium_event == ABSORB) {
+        terminated = true;
+        return glm::vec3(0.0);
+    }
+    else if (medium_event == REAL_SCATTER) {
+        if (segment.remainingBounces >= max_depth) {
+            terminated = true;
+            return glm::vec3(0.0);
+        }
+        segment.remainingBounces--;
+
+        /*float pdf = T_maj[0] * mp.sigma_s[0];
+        segment.rayThroughput *= T_maj * mp.sigma_s / pdf;
+        r_u *= T_maj * mp.sigma_s / pdf;*/
+    }
+}

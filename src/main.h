@@ -22,6 +22,7 @@
 #include "image.h"
 #include "pathtrace.h"
 #include "volpathtrace.h"
+#include "fullvolpathtrace.h"
 #include "utilities.h"
 #include "scene.h"
 
