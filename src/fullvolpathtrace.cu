@@ -188,6 +188,8 @@ __global__ void generateRayFromThinLensCamera_FullVol(Camera cam, int iter, int 
 		segment.ray.origin = thinLensCamOrigin;
 		segment.rng_engine = makeSeededRandomEngine_FullVol(iter, index, traceDepth);
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.r_u = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.r_l = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
@@ -225,6 +227,8 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		segment.ray.origin = cam.position;
 		segment.rng_engine = makeSeededRandomEngine_FullVol(iter, index, traceDepth);
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.r_u = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.r_l = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
@@ -477,7 +481,11 @@ __global__ void sampleParticipatingMedium_FullVol(
 				pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
-				pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
+				//pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
+				glm::vec3 T_maj = Sample_heterogeneous_FullVol(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
+				pathSegments[idx].rayThroughput *= T_maj / T_maj[0];
+				pathSegments[idx].r_u *= T_maj / T_maj[0];
+				pathSegments[idx].r_l *= T_maj / T_maj[0];
 			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {

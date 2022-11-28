@@ -763,7 +763,7 @@ MediumEvent sampleMediumEvent(const Medium& medium, glm::vec4& sigma_maj, float 
 
 
 inline __host__ __device__
-glm::vec3 SampleT(
+glm::vec3 Sample_heterogeneous_FullVol(
     int max_depth,
     const Medium& medium,
     PathSegment& segment,
@@ -774,6 +774,37 @@ glm::vec3 SampleT(
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
 {
+    return glm::vec3(0, 0, 0);
+    /*Ray sampleRay = segment.ray;
+    sampleRay.direction = glm::normalize(sampleRay.direction);
+    sampleRay.direction_inv = 1.0f / glm::normalize(sampleRay.direction);
+    float rayTMax = isect.t * glm::length(segment.ray.direction);
+
+
+    Ray worldRay = segment.ray;
+
+    Ray localRay;
+    localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
+    localRay.direction = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f));
+    localRay.direction_inv = 1.0f / localRay.direction;
+    float rayTMax = isect.t * glm::length(worldRay.direction);
+
+    // Compute tmin and tmax of ray overlap with medium bounds
+    glm::vec3 localBBMin = glm::vec3(0.0f);
+    glm::vec3 localBBMax = glm::vec3(1.0f);
+    float tMin, tMax, t;
+    if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t, false)) {
+        return glm::vec3(1.0f);
+    }
+
+
+
+
+    glm::vec3 T_maj = glm::vec3(1.0f);
+    bool done = false;
+
+
+
     bool scattered = false;
     bool terminated = false;
     glm::vec4 sigma_maj = glm::vec4(1);
@@ -796,8 +827,8 @@ glm::vec3 SampleT(
         }
         segment.remainingBounces--;
 
-        /*float pdf = T_maj[0] * mp.sigma_s[0];
+        float pdf = T_maj[0] * mp.sigma_s[0];
         segment.rayThroughput *= T_maj * mp.sigma_s / pdf;
-        r_u *= T_maj * mp.sigma_s / pdf;*/
-    }
+        r_u *= T_maj * mp.sigma_s / pdf;
+    }*/
 }

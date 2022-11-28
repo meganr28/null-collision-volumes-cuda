@@ -161,6 +161,8 @@ struct PathSegment {
     Ray ray;
     glm::vec3 accumulatedIrradiance;
     glm::vec3 rayThroughput;
+    glm::vec3 r_u;
+    glm::vec3 r_l;
     thrust::default_random_engine rng_engine;
     int remainingBounces;
     int medium;

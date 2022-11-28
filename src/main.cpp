@@ -6,8 +6,8 @@
 #include <cstring>
 
 //#define PATH_INTEGRATOR
-//#define VOLUME_INTEGRATOR
-#define FULL_VOLUME_INTEGRATOR
+#define VOLUME_INTEGRATOR
+//#define FULL_VOLUME_INTEGRATOR
 
 static std::string startTimeString;
 

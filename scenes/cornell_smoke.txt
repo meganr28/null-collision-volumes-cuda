@@ -50,13 +50,13 @@ EMITTANCE   	35
 MEDIUM 0
 heterogeneous
 ../scenes/vdb/smoke.vdb
-ABSORPTION 0.0114
-SCATTERING 0.0065
-ASYM_G     0.1
+ABSORPTION 0.006
+SCATTERING 0.02
+ASYM_G     0.9
 
 // Camera
 CAMERA
-RES         1024 1024
+RES         512 512
 FOVY        19.5
 ITERATIONS  10000
 DEPTH       8
