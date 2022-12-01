@@ -40,10 +40,9 @@ EMITTANCE   	0
 
 // Heterogeneous medium
 MEDIUM 0
-heterogeneous
-../scenes/vdb/cube.vdb
-ABSORPTION 0.55
-SCATTERING 0.34
+homogeneous
+ABSORPTION 0.04
+SCATTERING 0.03
 ASYM_G     0.01
 
 // Camera
@@ -123,3 +122,12 @@ mediuminterface -1 -1
 TRANS       0 0 10
 ROTAT       180 0 0
 SCALE       20 20 20
+
+// front wall
+OBJECT 7
+cube
+material -1
+mediuminterface 0 -1
+TRANS       0 0 0
+ROTAT       0 0 0
+SCALE       11.5 11.5 11.5

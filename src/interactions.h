@@ -304,6 +304,7 @@ glm::vec3 Sample_heterogeneous(
     if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t, false)) {
         return glm::vec3(1.0f);
     }
+    //segment.accumulatedIrradiance += glm::vec3(100, 0, 0);
 
     // Run delta tracking to sample medium interaction
     t = tMin;

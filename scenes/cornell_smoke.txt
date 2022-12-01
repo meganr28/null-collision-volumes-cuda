@@ -1,3 +1,4 @@
+
 // Emissive material (light)
 MATERIAL 		0
 R_COLOR        	5 15 45
@@ -50,21 +51,21 @@ EMITTANCE   	35
 MEDIUM 0
 heterogeneous
 ../scenes/vdb/smoke.vdb
-ABSORPTION 0.006
-SCATTERING 0.02
-ASYM_G     0.9
+ABSORPTION 0.01214
+SCATTERING 0.00165
+ASYM_G     0.1
 
 // Camera
 CAMERA
-RES         512 512
+RES         1024 1024
 FOVY        19.5
 ITERATIONS  10000
-DEPTH       8
+DEPTH       16
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
 MEDIUM      -1
-EYE         0.0 45.5 160
+EYE         0.0 45.5 190
 LOOKAT      0 45 0
 UP          0 1 0
 
@@ -78,8 +79,62 @@ TRANS       0 99.85 0
 ROTAT       90 0 0
 SCALE       8 8 1
 
-// Ceiling light
+// Floor
 OBJECT 1
+squareplane
+material 1
+mediuminterface -1 -1
+TRANS       0 -15.0 0
+ROTAT       270 0 0
+SCALE       80 80 80
+
+// Ceiling
+OBJECT 2
+squareplane
+material 1
+mediuminterface -1 -1
+TRANS       0 100.0 0
+ROTAT       90 0 0
+SCALE       80 80 80
+
+// Back wall
+OBJECT 3
+squareplane
+material 1
+mediuminterface -1 -1
+TRANS       0 42.5 -40
+ROTAT       0 0 0
+SCALE       80 115 40
+
+// Left wall
+OBJECT 4
+squareplane
+material 2
+mediuminterface -1 -1
+TRANS       -40 42.5 0
+ROTAT       0 90 0
+SCALE       80 115 40
+
+// Right wall
+OBJECT 5
+squareplane
+material 3
+mediuminterface -1 -1
+TRANS       40 42.5 0
+ROTAT       0 270 0
+SCALE       80 115 40
+
+// front wall
+OBJECT 6
+squareplane
+material 1
+mediuminterface -1 -1
+TRANS       0 42.5 40
+ROTAT       180 0 0
+SCALE       80 115 40
+
+// Ceiling light
+OBJECT 7
 squareplane
 material 5
 mediuminterface -1 -1

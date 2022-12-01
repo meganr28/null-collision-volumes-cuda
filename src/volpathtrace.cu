@@ -423,6 +423,7 @@ __global__ void computeIntersections_Vol(
 				isect.materialId = -1;
 				isect.surfaceNormal = glm::vec3(0.0f);
 
+
 				// TODO: change this to handle more advanced cases
 				isect.mediumInterface.inside = j;
 				isect.mediumInterface.outside = -1;
@@ -432,6 +433,7 @@ __global__ void computeIntersections_Vol(
 		if (isect.t >= MAX_INTERSECT_DIST) {
 			// hits nothing
 			pathSegments[path_index].remainingBounces = 0;
+			//pathSegments[path_index].accumulatedIrradiance += glm::vec3(0.55, .65, 0.85);
 		}
 		else {
 			intersections[path_index] = isect;

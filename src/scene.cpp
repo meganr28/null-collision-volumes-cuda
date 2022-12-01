@@ -470,8 +470,8 @@ int Scene::loadMedium(string mediumid) {
                 newMedium.gz = gridExtent[2];
                 std::cout << "Fog Volume Sphere Min: " << newMedium.aabb_min[0] << " " << newMedium.aabb_min[1] << " " << newMedium.aabb_min[2] << std::endl;
                 std::cout << "Fog Volume Sphere Max: " << newMedium.aabb_max[0] << " " << newMedium.aabb_max[1] << " " << newMedium.aabb_max[2] << std::endl;
-                //std::cout << "Voxel Size: " << grid->voxelSize()[0] << " " << grid->voxelSize()[1] << " " << grid->voxelSize()[2] << std::endl;
-                //std::cout << "Fog Volume Sphere Extent: " << gridExtent[0] << " " << gridExtent[1] << " " << gridExtent[2] << std::endl;
+                std::cout << "Voxel Size: " << grid->voxelSize()[0] << " " << grid->voxelSize()[1] << " " << grid->voxelSize()[2] << std::endl;
+                std::cout << "Fog Volume Sphere Extent: " << gridExtent[0] << " " << gridExtent[1] << " " << gridExtent[2] << std::endl;
 
                 // Set inverse max density
                 float maxDensity = 0.0f;
