@@ -15,6 +15,8 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
 
 [Milestone 1 Presentation](https://docs.google.com/presentation/d/14UCT0gwEhKlZwesXNz6KYzMYFSW_foeX/edit?usp=sharing&ouid=114838708762215680291&rtpof=true&sd=true)
 
+[Milestone 2 Presentation](https://docs.google.com/presentation/d/1hIc8dso9Vw6BNq6eRFusN4aV4GLUBG46/edit?usp=sharing&ouid=114838708762215680291&rtpof=true&sd=true)
+
 ### Build Instructions
 
 To build this project, ensure that you have a **CUDA-enabled** NVIDIA GPU. We have provided some other
