@@ -482,7 +482,8 @@ int Scene::loadMedium(string mediumid) {
                             maxDensity = glm::max(maxDensity, dstAcc.getValue(nanovdb::Coord(x, y, z)));
                         }
                     }
-                }   
+                }
+                newMedium.maxDensity = maxDensity;
                 newMedium.invMaxDensity = 1.0f / maxDensity;
                 std::cout << "Max Density: " << maxDensity << std::endl;
                 std::cout << "Inv Max Density: " << newMedium.invMaxDensity << std::endl;
@@ -527,10 +528,12 @@ int Scene::loadMedium(string mediumid) {
                 glm::vec3 sigma_s(ss, ss, ss);
                 newMedium.sigma_s = sigma_s;
             }
+            // TODO: add case here for NULL
             else if (strcmp(tokens[0].c_str(), "ASYM_G") == 0) {
                 newMedium.g = atof(tokens[1].c_str());
             }
         }
+        // TODO: update this to sigma_a + sigma_s + sigma_n
         newMedium.sigma_t = newMedium.sigma_a + newMedium.sigma_s;
         media.push_back(newMedium);
         return 1;

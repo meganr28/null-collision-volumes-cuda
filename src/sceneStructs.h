@@ -28,6 +28,7 @@ struct Medium {
     glm::vec3 sigma_t;       // Extinction
     int gx, gy, gz;          // Grid dimensions
     float g;                 // Asymmetry factor for Henyey-Greenstein
+    float maxDensity;
     float invMaxDensity; 
 };
 
@@ -159,15 +160,18 @@ struct RenderState {
 
 struct PathSegment {
     Ray ray;
+    Ray lastRealRay;
     glm::vec3 accumulatedIrradiance;
     glm::vec3 rayThroughput;
     glm::vec3 r_u;
     glm::vec3 r_l;
     thrust::default_random_engine rng_engine;
     int remainingBounces;
+    int realPathLength;
     int medium;
     bool prev_hit_was_specular;
     bool prev_hit_null_material;
+    bool prev_event_was_real;
 };
 
 struct MISLightRay {

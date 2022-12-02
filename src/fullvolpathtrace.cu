@@ -232,6 +232,7 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
+		segment.prev_event_was_real = true;
 		segment.medium = cam.medium;
 
 		float jittered_x = ((float)x) + jitterX;
@@ -244,8 +245,10 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		);
 
 		segment.ray.direction_inv = 1.0f / segment.ray.direction;
+		segment.lastRealRay = segment.ray;
 
 		segment.remainingBounces = traceDepth;
+		segment.realPathLength = 0;
 
 		pathSegments[index] = mat[threadIdx.x][threadIdx.y];
 	}
@@ -469,6 +472,11 @@ __global__ void sampleParticipatingMedium_FullVol(
 			return;
 		}
 
+		// Ray from last real collision
+		if (pathSegments[idx].prev_event_was_real) {
+			pathSegments[idx].lastRealRay = pathSegments[idx].ray;
+		}
+
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 
@@ -482,10 +490,7 @@ __global__ void sampleParticipatingMedium_FullVol(
 			}
 			else {
 				//pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
-				glm::vec3 T_maj = Sample_heterogeneous_FullVol(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
-				pathSegments[idx].rayThroughput *= T_maj / T_maj[0];
-				pathSegments[idx].r_u *= T_maj / T_maj[0];
-				pathSegments[idx].r_l *= T_maj / T_maj[0];
+				glm::vec3 Tr = Sample_channel(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
 			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {
@@ -528,9 +533,20 @@ __global__ void sampleParticipatingMedium_FullVol(
 		}
 
 		// Handle medium interaction
-		pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput 
+		if (mi.medium >= 0) {
+			//pathSegments[idx].rayThroughput *= handleMediumInteraction(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], mi, media_density, rayMediumIndex, rng, u01);
+			pathSegments[idx].rayThroughput *= handleMediumInteraction(idx, max_depth, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
+				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01);
+
+		}
+
+		if (pathSegments[idx].remainingBounces == 0) {
+			return;
+		}
+
+		/*pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput
 			* directLightSample(idx, pathSegments, materials, intersections[idx], geoms, geoms_size, tris, tris_size,
-				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); // TODO: * uniform sample one light;
+				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); // TODO: * uniform sample one light;*/
 		glm::vec3 wo = -pathSegments[idx].ray.direction;
 		glm::vec3 wi;
 		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
@@ -540,367 +556,6 @@ __global__ void sampleParticipatingMedium_FullVol(
 		pathSegments[idx].ray.direction_inv = 1.0f / wi;
 		pathSegments[idx].ray.origin = intersections[idx].mi.samplePoint + (wi * 0.001f);
 		pathSegments[idx].medium = intersections[idx].mi.medium;
-		pathSegments[idx].remainingBounces--;
-	}
-}
-
-// kernel to handle interactions within a medium (instead of surface)
-__global__ void generateMediumDirectLightSample_FullVol(
-	int num_paths,
-	int max_depth,
-	PathSegment* pathSegments,
-	Material* materials,
-	ShadeableIntersection* intersections,
-	Medium* media,
-	MISLightRay* direct_light_rays,
-	MISLightIntersection* direct_light_isects,
-	Light* lights,
-	int num_lights,
-	Geom* geoms
-)
-{
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if (idx < num_paths)
-	{
-		if (pathSegments[idx].remainingBounces == 0) {
-			return;
-		}
-
-		ShadeableIntersection intersection = intersections[idx];
-
-		if (intersections[idx].mi.medium == -1) {
-			if (intersection.materialId < 0) {
-				// Change ray direction
-				pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
-				pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
-					intersection.mediumInterface.inside;
-				pathSegments[idx].remainingBounces--;
-				pathSegments[idx].prev_hit_null_material = true;
-				return;
-			}
-		}
-
-		Material material = materials[intersection.materialId];
-	
-		if (intersections[idx].mi.medium == -1) {
-			if (material.emittance > 0.0f) {
-				if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
-					// only color lights on first hit
-					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
-				}
-				pathSegments[idx].remainingBounces = 0;
-				return;
-			}
-
-			pathSegments[idx].prev_hit_was_specular = material.type == SPEC_BRDF || material.type == SPEC_BTDF || material.type == SPEC_GLASS;
-
-			if (pathSegments[idx].prev_hit_was_specular) {
-				return;
-			}
-		}
-
-		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
-		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
-
-		// TODO: Check surface intersection bsdf doesn't exist
-		computeDirectLightSamplePreVis(
-			idx,
-			pathSegments,
-			material,
-			materials,
-			intersection,
-			media,
-			direct_light_rays,
-			direct_light_isects,
-			lights,
-			num_lights,
-			geoms,
-			rng,
-			u01);
-	}
-}
-
-__global__ void computeVisVolumetric_FullVol(
-	int num_paths
-	, PathSegment* pathSegments
-	, MISLightRay* direct_light_rays
-	, Geom* geoms
-	, int geoms_size
-	, Tri* tris
-	, int tris_size
-	, Medium* media
-	, int media_size
-	, MISLightIntersection* direct_light_intersections
-	, BVHNode_GPU* bvh_nodes
-	, const nanovdb::NanoGrid<float>* media_density
-)
-{
-	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (path_index < num_paths)
-	{
-		if (pathSegments[path_index].remainingBounces == 0) {
-			return;
-		}
-		else if (pathSegments[path_index].prev_hit_was_specular) {
-			return;
-		}
-		else if (pathSegments[path_index].prev_hit_null_material) {
-			return;
-		}
-
-		MISLightRay r = direct_light_rays[path_index];
-		MISLightIntersection isect = direct_light_intersections[path_index];
-
-		thrust::default_random_engine& rng = pathSegments[path_index].rng_engine;
-		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
-		
-		glm::vec3 Tr = glm::vec3(1.0f);
-
-		int num_iters = 0;
-
-		while (true) {
-			
-
-			// Surface Intersection
-			float t_min = MAX_INTERSECT_DIST;
-			int obj_ID = -1;
-			float t;
-			float tMin, tMax;
-			glm::vec3 tmp_normal;
-			int mat_id = -1;
-
-#ifdef ENABLE_TRIS
-			if (tris_size != 0) {
-				int stack_pointer = 0;
-				int cur_node_index = 0;
-				int node_stack[32];
-				BVHNode_GPU cur_node;
-				glm::vec3 P;
-				glm::vec3 s;
-				float t1;
-				float t2;
-				float tmin;
-				float tmax;
-				while (true) {
-					cur_node = bvh_nodes[cur_node_index];
-
-					// (ray-aabb test node)
-					t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
-					t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
-
-					tmin = glm::min(t1, t2);
-					tmax = glm::max(t1, t2);
-
-					t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
-					t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
-
-					tmin = glm::max(tmin, glm::min(t1, t2));
-					tmax = glm::min(tmax, glm::max(t1, t2));
-
-					t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
-					t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
-
-					tmin = glm::max(tmin, glm::min(t1, t2));
-					tmax = glm::min(tmax, glm::max(t1, t2));
-
-					if (tmax >= tmin) {
-						// we intersected AABB
-						if (cur_node.tri_index != -1) {
-							// this is leaf node
-							// triangle intersection test
-							Tri tri = tris[cur_node.tri_index];
-
-
-							t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
-							if (t >= -0.0001f) {
-								P = r.ray.origin + t * r.ray.direction;
-
-								// barycentric coords
-								s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-									glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-									glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-								if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-									s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
-									t_min = t;
-									tmp_normal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
-									mat_id = tri.mat_ID;
-									// Check if surface is medium transition
-									if (IsMediumTransition(tri.mediumInterface)) {
-										isect.mediumInterface = tri.mediumInterface;
-									}
-									else {
-										isect.mediumInterface.inside = r.medium;
-										isect.mediumInterface.outside = r.medium;
-									}
-								}
-							}
-							// if last node in tree, we are done
-							if (stack_pointer == 0) {
-								break;
-							}
-							// otherwise need to check rest of the things in the stack
-							stack_pointer--;
-							cur_node_index = node_stack[stack_pointer];
-						}
-						else {
-							node_stack[stack_pointer] = cur_node.offset_to_second_child;
-							stack_pointer++;
-							cur_node_index++;
-						}
-					}
-					else {
-						// didn't intersect AABB, remove from stack
-						if (stack_pointer == 0) {
-							break;
-						}
-						stack_pointer--;
-						cur_node_index = node_stack[stack_pointer];
-					}
-				}
-			}
-#endif
-
-			for (int i = 0; i < geoms_size; ++i)
-			{
-				Geom& geom = geoms[i];
-
-
-				if (geom.type == SPHERE) {
-#ifdef ENABLE_SPHERES
-					t = sphereIntersectionTest(geom, r.ray, tmp_normal);
-#endif
-				}
-				else if (geom.type == SQUAREPLANE) {
-#ifdef ENABLE_SQUAREPLANES
-					t = squareplaneIntersectionTest(geom, r.ray, tmp_normal);
-#endif
-				}
-				else {
-#ifdef ENABLE_RECTS
-					t = boxIntersectionTest(geom, r.ray, tmp_normal);
-#endif
-				}
-
-				if (t_min > t)
-				{
-					t_min = t;
-					obj_ID = i;
-					mat_id = geom.materialid;
-
-					// Check if surface is medium transition
-					if (IsMediumTransition(geom.mediumInterface)) {
-						isect.mediumInterface = geom.mediumInterface;
-					}
-					else {
-						isect.mediumInterface.inside = r.medium;
-						isect.mediumInterface.outside = r.medium;
-					}
-				}
-			}
-
-			for (int j = 0; j < media_size; j++) {
-				if (media[j].type == HOMOGENEOUS) continue;
-
-				const Medium& medium = media[j];
-				bool intersectAABB = aabbIntersectionTest(pathSegments[path_index], medium.aabb_min, medium.aabb_max, r.ray, tMin, tMax, t, false);
-
-				if (intersectAABB && t_min > t) {
-					t_min = t;
-					obj_ID = -2;
-					mat_id = -1;
-
-					// TODO: change this to handle more advanced cases
-					isect.mediumInterface.inside = j;
-					isect.mediumInterface.outside = -1;
-				}
-			}
-
-			// if we did not intersect an object or intersected object is not a "invisible" bounding box, the ray is occluded
-			if (obj_ID == -1 || (obj_ID != -1 && obj_ID != r.light_ID && mat_id != -1)) {
-				num_iters++;
-				direct_light_intersections[path_index].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-				return;
-			}
-
-			// if the current ray has a medium, then attenuate throughput based on transmission and distance traveled
-			if (r.medium != -1) {
-				if (media[r.medium].type == HOMOGENEOUS) {
-					Tr *= Tr_homogeneous(media[r.medium], r.ray, t_min);
-				}
-				else {
-					Tr *= Tr_heterogeneous(media[r.medium], pathSegments[path_index], r, media_density, t_min, rng, u01);
-				}
-				/*if (glm::length(Tr) <= 0.001f) {
-					direct_light_intersections[path_index].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-					return;
-				}*/
-			}
-
-			// if the intersected object IS the light source we selected, we are done
-			if (obj_ID == r.light_ID) {
-				num_iters++;
-				direct_light_intersections[path_index].LTE *= Tr;
-				return;
-			}
-
-			num_iters++;
-			// We encountered a bounding box/entry/exit of a volume, so we must change our medium value, update the origin, and traverse again
-			glm::vec3 old_origin = r.ray.origin;
-			r.ray.origin = old_origin + (r.ray.direction * (t_min + 0.01f));
-
-			// TODO: generalize to support both homogeneous and heterogeneous volumes
-			/*r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
-				isect.mediumInterface.inside;*/
-			r.medium = insideMedium(pathSegments[path_index], tMin, tMax, num_iters) ? isect.mediumInterface.inside : isect.mediumInterface.outside;
-		
-}
-	}
-}
-
-__global__ void mediumSpawnPathSegment_FullVol(
-	int iter
-	, int num_paths
-	, ShadeableIntersection* intersections
-	, MISLightIntersection* direct_light_isects
-	, int num_lights
-	, PathSegment* pathSegments
-	, Material* materials
-	, Medium* media) {
-
-	int idx = blockIdx.x * blockDim.x + threadIdx.x;
-	if (idx < num_paths)
-	{
-		
-		if (pathSegments[idx].remainingBounces == 0) {
-			return;
-		}
-		else if (pathSegments[idx].prev_hit_null_material) {
-			pathSegments[idx].prev_hit_null_material = false;
-			return;
-		}
-		else if (intersections[idx].mi.medium == -1) {
-			return;
-		}
-
-		ShadeableIntersection intersection = intersections[idx];
-
-		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
-		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
-
-		pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
-		glm::vec3 wo = -pathSegments[idx].ray.direction;
-		glm::vec3 wi;
-		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
-
-		// Create new ray
-		pathSegments[idx].ray.direction = wi;
-		pathSegments[idx].ray.direction_inv = 1.0f / wi;
-		pathSegments[idx].ray.origin = intersection.mi.samplePoint + (wi * 0.001f);
-		// TODO TRY: Assert(mediumInterface.inside == mediumInterface.outside);
-		//pathSegments[idx].medium = pathSegments[idx].medium;
-		pathSegments[idx].medium = intersection.mi.medium;
 		pathSegments[idx].remainingBounces--;
 	}
 }
