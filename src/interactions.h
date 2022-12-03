@@ -128,12 +128,12 @@ inline __host__ __device__
 float evaluatePhaseHG(const glm::vec3& wo, const glm::vec3& wi, float g)
 {
     float cosTheta = glm::dot(wo, wi);
-    float denom = 1 + g * g + 2 * g * cosTheta;
-    return INV_FOUR_PI * (1 - g * g) / (denom * glm::sqrt(denom));
+    float denom = 1.0f + g * g + 2.0f * g * cosTheta;
+    return INV_FOUR_PI * (1.0f - g * g) / (denom * glm::sqrt(denom));
 }
 
 inline __host__ __device__
-float Sample_p(const glm::vec3& wo, glm::vec3* wi, const glm::vec2& u, float g)
+float Sample_p(const glm::vec3& wo, glm::vec3* wi, float* pdf, const glm::vec2& u, float g)
 {
     // cosTheta for Henyey-Greenstein
     float cosTheta;
@@ -154,7 +154,13 @@ float Sample_p(const glm::vec3& wo, glm::vec3* wi, const glm::vec2& u, float g)
     buildOrthonormalBasis(wo, &v1, &v2);
     *wi = convertToSphericalDirection(sinTheta, cosTheta, phi, v1, v2, wo);
 
-    return evaluatePhaseHG(wo, *wi, g);
+    float p = evaluatePhaseHG(wo, *wi, g);
+
+    if (pdf) {
+        *pdf = p;
+    }
+
+    return p;
 }
 
 inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_index)
@@ -747,25 +753,24 @@ glm::vec3 directLightSample(
 }
 
 inline __host__ __device__
-MediumEvent sampleMediumEvent(const Medium& medium, glm::vec4& sigma_maj, float rng_val) {
-
-    float p_absorb = medium.sigma_a[0] / sigma_maj[0];
-    if (p_absorb > rng_val) {
+MediumEvent sampleMediumEvent(float pAbsorb, float pScatter, float pNull, float rng_val) {
+    if (pAbsorb > rng_val) {
+    //if (0.4f > rng_val) {
         return ABSORB;
     }
 
-    float p_scatter = medium.sigma_s[0] / sigma_maj[0];
-    if (p_scatter + p_absorb > rng_val) {
+    if (pScatter + pAbsorb > rng_val) {
+    //if (0.7f > rng_val) {
         return REAL_SCATTER;
     }
-    
+
     return NULL_SCATTER;
 }
 
 inline __host__ __device__
 glm::vec3 getMajorant(const Medium& medium)
 {
-    return medium.maxDensity * medium.sigma_t;
+    return medium.sigma_t;
 }
 
 inline __host__ __device__
@@ -773,11 +778,14 @@ glm::vec3 getCoefficients(
     const nanovdb::NanoGrid<float>* media_density,
     const Medium& medium,
     const glm::vec3& samplePoint,
+    PathSegment& segment,
     glm::vec3& scattering,
     glm::vec3& absorption,
     glm::vec3& null)
 {
-    float density = Density_heterogeneous(medium, media_density, samplePoint);
+    glm::vec3 localSamplePoint = glm::vec3(medium.worldToMedium * glm::vec4(samplePoint, 1.0));
+    float density = Density_heterogeneous(medium, media_density, localSamplePoint);
+    //if (density <= 0.0001f) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
     scattering = density * glm::vec3(medium.sigma_s);
     absorption = density * glm::vec3(medium.sigma_a);
     null = getMajorant(medium) - (scattering + absorption);
@@ -810,7 +818,6 @@ glm::vec3 Sample_channel(
     if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t, false)) {
         return glm::vec3(1.0f);
     }
-
     int channel = 0;
     tMin = glm::max(tMin, 0.0f);
     t = tMin - glm::log(1.0f - u01(rng)) / getMajorant(medium)[channel];
@@ -827,7 +834,7 @@ glm::vec3 Sample_channel(
 }
 
 inline __host__ __device__
-glm::vec3 handleMediumInteraction(
+bool handleMediumInteraction(
     int idx,
     int max_depth,
     PathSegment* pathSegments,
@@ -852,39 +859,56 @@ glm::vec3 handleMediumInteraction(
     int heroChannel = 0;
 
     glm::vec3 scattering, absorption, null;
-    getCoefficients(media_density, media[idx], mi.samplePoint, scattering, absorption, null);
+    getCoefficients(media_density, media[mi.medium], mi.samplePoint, pathSegments[idx], scattering, absorption, null);
     
-    glm::vec3 majorant = getMajorant(media[idx]);
+    glm::vec3 majorant = getMajorant(media[mi.medium]);
     float pAbsorb = absorption[heroChannel] / majorant[heroChannel];
     float pScatter = scattering[heroChannel] / majorant[heroChannel];
-    float pNull = 1.0f - pScatter;
+    float pNull = glm::max(0.0f, 1.0f - pAbsorb - pScatter);
 
     // choose a medium event to sample (absorption, real scattering, or null scattering
-    glm::vec3 wi;
-    float xi = u01(rng);
+    MediumEvent eventType = sampleMediumEvent(pAbsorb, pScatter, pNull, u01(rng));
 
-    if (xi < pAbsorb) {
+    if (eventType == ABSORB) {
+        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
         pathSegments[idx].remainingBounces = 0;
-        return glm::vec3(0.0);
+        return false;
     }
-    else if (xi < pNull) {
+    else if (eventType == NULL_SCATTER) {
+        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
+        // TODO: maybe decrement remaining bounces
         pathSegments[idx].prev_event_was_real = false;
-        return glm::vec3(1.0);
+        pathSegments[idx].ray.origin = mi.samplePoint + (pathSegments[idx].ray.direction * 0.001f);
+        return true;
     }
     else {
+        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
         pathSegments[idx].prev_event_was_real = true;
         pathSegments[idx].realPathLength++;
 
-        glm::vec3 Ld = directLightSample(idx, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
-            media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); 
-        pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
-        
-        // If single-scatter only, exit after real path length is greater than 1
-        if (pathSegments[idx].realPathLength > 0) {
+        // Stop after reaching max depth
+        if (pathSegments[idx].realPathLength >= max_depth) {
             pathSegments[idx].remainingBounces = 0;
-            return glm::vec3(0.0);
+            return false;
         }
 
-        return glm::vec3(1.0f);
+        // Sample phase function
+        glm::vec3 phase_wi;
+        float phase_pdf = 0.f;
+        float phase_p = Sample_p(-pathSegments[idx].ray.direction, &phase_wi, &phase_pdf, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
+        
+        // Update ray segment
+        pathSegments[idx].rayThroughput *= phase_p / phase_pdf;
+        pathSegments[idx].ray.direction = phase_wi;
+        pathSegments[idx].ray.direction_inv = 1.0f / phase_wi;
+        pathSegments[idx].ray.origin = mi.samplePoint + (phase_wi * 0.001f);
+        pathSegments[idx].medium = mi.medium;
+        pathSegments[idx].remainingBounces--;
+
+        /*glm::vec3 Ld = directLightSample(idx, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
+            media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); 
+        pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;*/
+
+        return true;
     }
 }

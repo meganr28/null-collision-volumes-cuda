@@ -871,7 +871,8 @@ __global__ void mediumSpawnPathSegment(
 		pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
 		glm::vec3 wo = -pathSegments[idx].ray.direction;
 		glm::vec3 wi;
-		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
+		float pdf = 0.f;
+		Sample_p(wo, &wi, &pdf, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
 
 
 		// Create new ray

@@ -11,6 +11,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
+#define FULL_VOLUME_INTEGRATOR
+
 Scene::Scene(string filename) {
     cout << "Reading scene from " << filename << " ..." << endl;
     cout << " " << endl;
@@ -528,13 +530,16 @@ int Scene::loadMedium(string mediumid) {
                 glm::vec3 sigma_s(ss, ss, ss);
                 newMedium.sigma_s = sigma_s;
             }
-            // TODO: add case here for NULL
             else if (strcmp(tokens[0].c_str(), "ASYM_G") == 0) {
                 newMedium.g = atof(tokens[1].c_str());
             }
         }
-        // TODO: update this to sigma_a + sigma_s + sigma_n
+#ifdef FULL_VOLUME_INTEGRATOR
+        newMedium.sigma_t = newMedium.maxDensity * (newMedium.sigma_a + newMedium.sigma_s);
+        //newMedium.sigma_n = newMedium.sigma_t - newMedium.sigma_a - newMedium.sigma_s; TODO: find appropriate place to set sigma_n
+#else
         newMedium.sigma_t = newMedium.sigma_a + newMedium.sigma_s;
+#endif
         media.push_back(newMedium);
         return 1;
     }

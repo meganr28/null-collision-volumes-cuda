@@ -472,10 +472,10 @@ __global__ void sampleParticipatingMedium_FullVol(
 			return;
 		}
 
-		// Ray from last real collision
-		if (pathSegments[idx].prev_event_was_real) {
-			pathSegments[idx].lastRealRay = pathSegments[idx].ray;
-		}
+		//// Ray from last real collision
+		//if (pathSegments[idx].prev_event_was_real) {
+		//	pathSegments[idx].lastRealRay = pathSegments[idx].ray;
+		//}
 
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
@@ -498,6 +498,26 @@ __global__ void sampleParticipatingMedium_FullVol(
 		}
 		intersections[idx].mi = mi;
 
+		// Handle medium interaction
+		bool scattered = false;
+		if (mi.medium >= 0) {
+			//pathSegments[idx].rayThroughput *= handleMediumInteraction(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], mi, media_density, rayMediumIndex, rng, u01);
+			scattered = handleMediumInteraction(idx, max_depth, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
+				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01);
+		}
+
+		if (pathSegments[idx].remainingBounces == 0) {
+			return;
+		}
+
+		if (scattered) {
+			return;
+		}
+
+		/*pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput
+			* directLightSample(idx, pathSegments, materials, intersections[idx], geoms, geoms_size, tris, tris_size,
+				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); // TODO: * uniform sample one light;*/
+
 		// Handle surface interaction
 		ShadeableIntersection intersection = intersections[idx];
 
@@ -517,10 +537,10 @@ __global__ void sampleParticipatingMedium_FullVol(
 
 		if (intersections[idx].mi.medium == -1) {
 			if (material.emittance > 0.0f) {
-				if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
+				//if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
 					// only color lights on first hit
 					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
-				}
+				//}
 				pathSegments[idx].remainingBounces = 0;
 				return;
 			}
@@ -531,32 +551,6 @@ __global__ void sampleParticipatingMedium_FullVol(
 				return;
 			}
 		}
-
-		// Handle medium interaction
-		if (mi.medium >= 0) {
-			//pathSegments[idx].rayThroughput *= handleMediumInteraction(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], mi, media_density, rayMediumIndex, rng, u01);
-			pathSegments[idx].rayThroughput *= handleMediumInteraction(idx, max_depth, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
-				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01);
-
-		}
-
-		if (pathSegments[idx].remainingBounces == 0) {
-			return;
-		}
-
-		/*pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput
-			* directLightSample(idx, pathSegments, materials, intersections[idx], geoms, geoms_size, tris, tris_size,
-				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); // TODO: * uniform sample one light;*/
-		glm::vec3 wo = -pathSegments[idx].ray.direction;
-		glm::vec3 wi;
-		Sample_p(wo, &wi, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
-
-		// Create new ray
-		pathSegments[idx].ray.direction = wi;
-		pathSegments[idx].ray.direction_inv = 1.0f / wi;
-		pathSegments[idx].ray.origin = intersections[idx].mi.samplePoint + (wi * 0.001f);
-		pathSegments[idx].medium = intersections[idx].mi.medium;
-		pathSegments[idx].remainingBounces--;
 	}
 }
 
