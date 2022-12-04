@@ -51,7 +51,7 @@ ASYM_G     0.1
 CAMERA
 RES         1024 1024
 FOVY        19.5
-ITERATIONS  10000
+ITERATIONS  50000
 DEPTH       16
 FILE        cornell
 FOCAL_DISTANCE	17.9
@@ -67,6 +67,6 @@ OBJECT 0
 squareplane
 material 0
 mediuminterface -1 -1
-TRANS       0 99.85 0
+TRANS       0 119.85 0
 ROTAT       90 0 0
 SCALE       60 60 1

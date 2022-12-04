@@ -479,7 +479,88 @@ glm::vec3 computeDirectLightSamplePreVis(
             direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f / pdf_L;
         }
     }
+}
 
+inline __host__ __device__
+glm::vec3 getMajorant(const Medium& medium)
+{
+    return medium.sigma_t;
+}
+
+inline __host__ __device__
+void getCoefficients(
+    const nanovdb::NanoGrid<float>* media_density,
+    const Medium& medium,
+    const glm::vec3& samplePoint,
+    PathSegment& segment,
+    glm::vec3& scattering,
+    glm::vec3& absorption,
+    glm::vec3& null)
+{
+    glm::vec3 localSamplePoint = glm::vec3(medium.worldToMedium * glm::vec4(samplePoint, 1.0));
+    float density = Density_heterogeneous(medium, media_density, localSamplePoint);
+    //if (density <= 0.0001f) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+    scattering = density * glm::vec3(medium.sigma_s);
+    absorption = density * glm::vec3(medium.sigma_a);
+    null = getMajorant(medium) - (scattering + absorption);
+}
+
+// This returns Tr
+inline __host__ __device__
+glm::vec3 Sample_channel_direct(
+    int idx,
+    const Medium& medium,
+    PathSegment& segment,
+    const MISLightIntersection& isect,
+    const nanovdb::NanoGrid<float>* media_density,
+    MISLightRay* direct_light_rays,
+    float& ray_t,
+    glm::vec3& T_ray,
+    thrust::default_random_engine& rng,
+    thrust::uniform_real_distribution<float>& u01)
+{
+    Ray worldRay = segment.ray;
+
+    Ray localRay;
+    localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
+    localRay.direction = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f));
+    localRay.direction_inv = 1.0f / localRay.direction;
+
+    // Compute tmin and tmax of ray overlap with medium bounds
+    glm::vec3 localBBMin = glm::vec3(0.0f);
+    glm::vec3 localBBMax = glm::vec3(1.0f);
+    float tMin, tMax, t;
+    if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t, false)) {
+        return glm::vec3(1.0f);
+    }
+
+    int channel = 0;
+    tMin = glm::max(tMin, 0.0f);
+    t = tMin - glm::log(1.0f - u01(rng)) / getMajorant(medium)[channel];
+    bool sampleMedium = t < tMax;
+    t = glm::min(t, tMax);
+
+    glm::vec3 T_maj = glm::vec3(1.0f);
+
+    if (sampleMedium) {
+        ray_t = t;
+        glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
+
+        T_maj = glm::exp(-getMajorant(medium) * (t - tMin));
+        glm::vec3 scattering, absorption, null;
+        getCoefficients(media_density, medium, samplePoint, segment, scattering, absorption, null);
+        glm::vec3 majorant = getMajorant(medium);
+
+        float pdf = T_maj[0] * majorant[channel];
+        T_ray *= T_maj * null / pdf;
+        direct_light_rays[idx].r_l *= T_maj * majorant / pdf;
+        direct_light_rays[idx].r_u *= T_maj * null / pdf;
+
+        return T_maj;
+    }
+    else {
+        return glm::exp(-getMajorant(medium) * (t - tMin));
+    }
 }
 
 // determines if sample point is occluded by scene geometry
@@ -505,7 +586,7 @@ glm::vec3 computeVisibility(
     MISLightRay r = direct_light_rays[idx];
     MISLightIntersection isect = direct_light_isects[idx];
 
-    glm::vec3 Tr = glm::vec3(1.0f);
+    glm::vec3 T_ray = glm::vec3(1.0f);
 
     int num_iters = 0;
 
@@ -665,17 +746,25 @@ glm::vec3 computeVisibility(
         // if the current ray has a medium, then attenuate throughput based on transmission and distance traveled
         if (r.medium != -1) {
             if (media[r.medium].type == HOMOGENEOUS) {
-                Tr *= Tr_homogeneous(media[r.medium], r.ray, t_min);
+                T_ray *= Tr_homogeneous(media[r.medium], r.ray, t_min);
             }
             else {
-                Tr *= Tr_heterogeneous(media[r.medium], pathSegments[idx], r, media_density, t_min, rng, u01);
+                //Tr *= Tr_heterogeneous(media[r.medium], pathSegments[idx], r, media_density, t_min, rng, u01);
+                glm::vec3 T_maj = Sample_channel_direct(idx, media[r.medium], pathSegments[idx], isect, media_density, direct_light_rays, t_min, T_ray, rng, u01);
+                T_ray *= T_maj / T_maj[0];
+                direct_light_rays[idx].r_l *= T_maj / T_maj[0];
+                direct_light_rays[idx].r_u *= T_maj / T_maj[0];
             }
+        }
+
+        if (glm::length(T_ray) <= 0.00001f) {
+            return glm::vec3(0.0f);
         }
 
         // if the intersected object IS the light source we selected, we are done
         if (obj_ID == r.light_ID) {
             num_iters++;
-            return Tr;
+            return T_ray;
         }
 
         num_iters++;
@@ -733,21 +822,35 @@ glm::vec3 directLightSample(
     direct_light_rays[idx].ray.direction = wi;
     direct_light_rays[idx].ray.direction_inv = 1.0f / wi;
     direct_light_rays[idx].medium = pathSegments[idx].medium;
+    direct_light_rays[idx].r_l = glm::vec3(1.0f);
+    direct_light_rays[idx].r_u = glm::vec3(1.0f);
+
 
     // evaluate phase function
     float p = evaluatePhaseHG(intersection.mi.wo, wi, media[intersection.mi.medium].g);
+    float phase_pdf = p;
+
+    if (phase_pdf <= 0.0001f) {
+        direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+        return glm::vec3(0.0f);
+    }
     direct_light_rays[idx].f = glm::vec3(p);
     if (pdf_L <= 0.0001f) {
         direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+        return glm::vec3(0.0f);
     }
     else {
-        direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f / pdf_L;
+        direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f;
     }
 
     // compute visibility
-    glm::vec3 visibilityTr = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, tris_size, media, media_size, media_density,
+    glm::vec3 T_ray = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, tris_size, media, media_size, media_density,
         direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01);
-    direct_light_isects[idx].LTE *= visibilityTr;
+    
+    direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L;
+    direct_light_rays[idx].r_u *= pathSegments[idx].r_u * phase_pdf;
+    
+    direct_light_isects[idx].LTE *= T_ray / (direct_light_rays[idx].r_l + direct_light_rays[idx].r_u);
 
     return direct_light_isects[idx].LTE;
 }
@@ -765,30 +868,6 @@ MediumEvent sampleMediumEvent(float pAbsorb, float pScatter, float pNull, float 
     }
 
     return NULL_SCATTER;
-}
-
-inline __host__ __device__
-glm::vec3 getMajorant(const Medium& medium)
-{
-    return medium.sigma_t;
-}
-
-inline __host__ __device__
-glm::vec3 getCoefficients(
-    const nanovdb::NanoGrid<float>* media_density,
-    const Medium& medium,
-    const glm::vec3& samplePoint,
-    PathSegment& segment,
-    glm::vec3& scattering,
-    glm::vec3& absorption,
-    glm::vec3& null)
-{
-    glm::vec3 localSamplePoint = glm::vec3(medium.worldToMedium * glm::vec4(samplePoint, 1.0));
-    float density = Density_heterogeneous(medium, media_density, localSamplePoint);
-    //if (density <= 0.0001f) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-    scattering = density * glm::vec3(medium.sigma_s);
-    absorption = density * glm::vec3(medium.sigma_a);
-    null = getMajorant(medium) - (scattering + absorption);
 }
 
 // This returns Tr
@@ -837,6 +916,7 @@ inline __host__ __device__
 bool handleMediumInteraction(
     int idx,
     int max_depth,
+    const glm::vec3 Tr, 
     PathSegment* pathSegments,
     Material* materials,
     ShadeableIntersection& isect,
@@ -878,7 +958,20 @@ bool handleMediumInteraction(
         //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
         // TODO: maybe decrement remaining bounces
         pathSegments[idx].prev_event_was_real = false;
+        float pdf = Tr[heroChannel] * null[heroChannel];
+        if (pdf == 0) {
+            pathSegments[idx].rayThroughput = glm::vec3(0.0f);
+        }
+        else {
+            pathSegments[idx].rayThroughput *= Tr * null / pdf;
+        }
+
+        pathSegments[idx].r_u *= Tr * null / pdf;
+        pathSegments[idx].r_l *= Tr * majorant / pdf;
         pathSegments[idx].ray.origin = mi.samplePoint + (pathSegments[idx].ray.direction * 0.001f);
+        if (glm::length(pathSegments[idx].rayThroughput) <= 0.001f || glm::length(pathSegments[idx].r_u) <= 0.001f) {
+            pathSegments[idx].remainingBounces = 0;
+        }      
         return true;
     }
     else {
@@ -892,23 +985,40 @@ bool handleMediumInteraction(
             return false;
         }
 
-        // Sample phase function
-        glm::vec3 phase_wi;
-        float phase_pdf = 0.f;
-        float phase_p = Sample_p(-pathSegments[idx].ray.direction, &phase_wi, &phase_pdf, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
-        
-        // Update ray segment
-        pathSegments[idx].rayThroughput *= phase_p / phase_pdf;
-        pathSegments[idx].ray.direction = phase_wi;
-        pathSegments[idx].ray.direction_inv = 1.0f / phase_wi;
-        pathSegments[idx].ray.origin = mi.samplePoint + (phase_wi * 0.001f);
-        pathSegments[idx].medium = mi.medium;
-        pathSegments[idx].remainingBounces--;
+        float pdf = Tr[heroChannel] * scattering[heroChannel];
+        pathSegments[idx].rayThroughput *= Tr * scattering / pdf;
+        pathSegments[idx].r_u *= Tr * scattering / pdf;
 
-        /*glm::vec3 Ld = directLightSample(idx, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
-            media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); 
-        pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;*/
+        bool sampleLight = (glm::length(pathSegments[idx].rayThroughput) > 0.001f || glm::length(pathSegments[idx].r_u) > 0.001f);
+        if (sampleLight) {
+            // Direct light sampling
+            glm::vec3 Ld = directLightSample(idx, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
+                media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01);
+            pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
-        return true;
+            // Sample phase function
+            glm::vec3 phase_wi;
+            float phase_pdf = 0.f;
+            float phase_p = Sample_p(-pathSegments[idx].ray.direction, &phase_wi, &phase_pdf, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
+            if (phase_pdf == 0.f) {
+                pathSegments[idx].remainingBounces = 0;
+                return false;
+            }
+
+            // Update ray segment
+            pathSegments[idx].rayThroughput *= phase_p / phase_pdf;
+            pathSegments[idx].r_l = pathSegments[idx].r_u / phase_pdf;
+            pathSegments[idx].ray.direction = phase_wi;
+            pathSegments[idx].ray.direction_inv = 1.0f / phase_wi;
+            pathSegments[idx].ray.origin = mi.samplePoint + (phase_wi * 0.001f);
+            pathSegments[idx].medium = mi.medium;
+            pathSegments[idx].remainingBounces--;
+
+            return true;
+        }
+        else {
+            pathSegments[idx].remainingBounces = 0;
+            return false;
+        }       
     }
 }

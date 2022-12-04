@@ -484,13 +484,14 @@ __global__ void sampleParticipatingMedium_FullVol(
 		int rayMediumIndex = pathSegments[idx].medium;
 		MediumInteraction mi;
 		mi.medium = -1;
+		glm::vec3 Tr;
 		if (rayMediumIndex >= 0) {
 			if (media[rayMediumIndex].type == HOMOGENEOUS) {
 				pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
 				//pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
-				glm::vec3 Tr = Sample_channel(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
+				Tr = Sample_channel(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
 			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {
@@ -502,7 +503,7 @@ __global__ void sampleParticipatingMedium_FullVol(
 		bool scattered = false;
 		if (mi.medium >= 0) {
 			//pathSegments[idx].rayThroughput *= handleMediumInteraction(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], mi, media_density, rayMediumIndex, rng, u01);
-			scattered = handleMediumInteraction(idx, max_depth, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
+			scattered = handleMediumInteraction(idx, max_depth, Tr, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
 				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01);
 		}
 
@@ -513,6 +514,8 @@ __global__ void sampleParticipatingMedium_FullVol(
 		if (scattered) {
 			return;
 		}
+
+
 
 		/*pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput
 			* directLightSample(idx, pathSegments, materials, intersections[idx], geoms, geoms_size, tris, tris_size,

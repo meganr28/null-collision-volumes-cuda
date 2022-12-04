@@ -177,6 +177,8 @@ struct PathSegment {
 struct MISLightRay {
     Ray ray;
     glm::vec3 f;
+    glm::vec3 r_l;
+    glm::vec3 r_u;
     float pdf;
     int light_ID;
     int medium;
