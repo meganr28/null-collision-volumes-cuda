@@ -40,7 +40,7 @@ EMITTANCE   	0
 
 // Emissive material (light)
 MATERIAL 		5
-R_COLOR        	5 45 15
+R_COLOR        	15 35 55
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
@@ -56,7 +56,7 @@ ASYM_G     0.01
 
 // Camera
 CAMERA
-RES         512 512
+RES         1024 1024
 FOVY        19.5
 ITERATIONS  20000
 DEPTH       8
