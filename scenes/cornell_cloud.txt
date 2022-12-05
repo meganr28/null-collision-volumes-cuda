@@ -1,11 +1,11 @@
 
 // Emissive material (light)
 MATERIAL 		0
-R_COLOR        	40 10 2
+R_COLOR        	40 10 5
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	35
+EMITTANCE   	15
 
 // Diffuse white
 MATERIAL 1
@@ -39,10 +39,26 @@ DIFFUSE_BRDF
 IOR    			1.55
 EMITTANCE   	0
 
+// Emissive material (light)
+MATERIAL 		5
+R_COLOR        	5 7 40
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	15
+
+// Emissive material (light)
+MATERIAL 		6
+R_COLOR        	10 40 5
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	15
+
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/smoke.vdb
+../scenes/vdb/intel_clouds_med_res/intelCloudLib_dense.4.M.vdb
 ABSORPTION 0.00015814
 SCATTERING 0.007125
 ASYM_G     0.01
@@ -67,6 +83,24 @@ OBJECT 0
 squareplane
 material 0
 mediuminterface -1 -1
-TRANS       0 119.85 0
+TRANS       0 60.85 -75
+ROTAT       90 270 0
+SCALE       60 60 1
+
+// Ceiling light
+OBJECT 1
+squareplane
+material 5
+mediuminterface -1 -1
+TRANS       -175 175.85 -100
 ROTAT       90 0 0
+SCALE       60 60 1
+
+// Ceiling light
+OBJECT 2
+squareplane
+material 6
+mediuminterface -1 -1
+TRANS       -325 25.85 -100
+ROTAT       90 90 0
 SCALE       60 60 1
