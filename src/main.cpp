@@ -52,6 +52,8 @@ int cur_y;
 int width;
 int height;
 
+bool beginning = true;
+
 //-------------------------------
 //-------------MAIN--------------
 //-------------------------------
@@ -197,11 +199,23 @@ void runCuda() {
 
 	if (integratorchanged) {
 		if (previous_integrator == NULL_SCATTERING_MIS) {
+			if (!beginning) {
+				ui_sigma_a.x *= 0.33f;
+				ui_sigma_s.x *= 0.33f;
+			}
+			
 			fullVolPathtraceFree();
 		}
 		else if (previous_integrator == DELTA_TRACKING_NEE) {
+			if (!beginning) {
+				ui_sigma_a.x *= 3.0f;
+				ui_sigma_s.x *= 3.0f;
+			}
+			
 			volPathtraceFree();
 		}
+
+		beginning = false;
 
 		if (ui_integrator == NULL_SCATTERING_MIS) {
 
