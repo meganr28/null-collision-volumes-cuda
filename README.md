@@ -38,7 +38,6 @@ The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz
     * Homogeneous media
     * Interactions between surface and media
     * Volumes on the inside and outside of objects (medium interfaces)
-    * Handling spectrally-varying absorption and scattering coefficients
     * Loading .vdb files
 - In-Progress 
     * Debug and remove bias in null-scattering MIS renders (white pixels show up in renders)
