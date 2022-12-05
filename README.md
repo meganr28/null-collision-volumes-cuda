@@ -141,14 +141,23 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 
 #### Heterogeneous Media with Null-Scattering MIS
 
-| Delta Tracking  |  Null-Scattering (Unidirectional) | Null-Scattering MIS (NEE + Unidirectional) |
-|:----------:    |:-------------:  | :-------------:  |
-| ![](img/milestone_2/cool_vortices.PNG) |  ![](img/milestone_2/cool_vortices.PNG)  |  ![](img/milestone_2/cool_vortices.PNG)  |
+| Delta Tracking  | Null-Scattering MIS (NEE + Unidirectional) |
+|:----------:    |:-------------:  |
+| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  |
 
 ### Performance
 
 #### Delta Tracking vs. Null Scattering MIS
 
-#### Varying Extinction and Phase Factors
+| Delta Tracking (26 ms/frame)  | Null-Scattering MIS (18 ms/frame)  |
+|:----------:    |:-------------:  |
+| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  |
 
 #### Ray Depth
+
+| Depth  |      Result |
+|:----------:    |:-------------:  |
+| Depth 2  (14 ms/frame)      |  ![](img/milestone_3/depth_2.PNG)   | 
+| Depth 8  (22 ms/frame)      |  ![](img/milestone_3/depth_8.PNG)   |
+| Depth 32 (30 ms/frame)      |  ![](img/milestone_3/depth_32.PNG)   |
+| Depth 128 (60 ms/frame)     |  ![](img/milestone_3/depth_128.PNG)   |
