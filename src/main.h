@@ -38,6 +38,11 @@ extern int iteration;
 extern int width;
 extern int height;
 
+extern int ui_max_ray_depth;
+extern glm::vec3 ui_sigma_a;
+extern glm::vec3 ui_sigma_s;
+extern float ui_g;
+
 void runCuda();
 void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods);
 void mousePositionCallback(GLFWwindow* window, double xpos, double ypos);

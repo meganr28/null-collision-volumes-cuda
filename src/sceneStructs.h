@@ -197,9 +197,15 @@ struct MISLightIntersection {
 struct ShadeableIntersection {
   float t;
   glm::vec3 surfaceNormal;
+  int objID;
   int materialId;
   MediumInterface mediumInterface;
   MediumInteraction mi;
 };
 
+struct GuiParameters {
+    glm::vec3 sigma_a;
+    glm::vec3 sigma_s;
+    float g;
+};
 

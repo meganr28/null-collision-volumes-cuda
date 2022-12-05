@@ -9,4 +9,4 @@
 void InitDataContainer_Vol(GuiDataContainer* guiData);
 void volPathtraceInit(Scene *scene);
 void volPathtraceFree();
-void volPathtrace(uchar4 *pbo, int frame, int iteration);
+void volPathtrace(uchar4 *pbo, int frame, int iteration, GuiParameters& gui_params);

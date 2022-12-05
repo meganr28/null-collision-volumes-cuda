@@ -29,6 +29,8 @@
 #define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
+#define BOUNCE_PADDING 0
+
 
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -272,12 +274,13 @@ __global__ void computeIntersections_FullVol(
 
 	if (path_index < num_paths)
 	{
-		if (pathSegments[path_index].remainingBounces == 0) {
+		if (pathSegments[path_index].remainingBounces <= 0) {
 			return;
 		}
 		Ray r = pathSegments[path_index].ray;
 
 		ShadeableIntersection isect;
+		isect.objID = -1;
 		isect.t = MAX_INTERSECT_DIST;
 
 		float t;
@@ -403,6 +406,7 @@ __global__ void computeIntersections_FullVol(
 			}
 			else if (isect.t > t) {
 				isect.t = t;
+				isect.objID = i;
 				isect.materialId = geom.materialid;
 				isect.surfaceNormal = tmp_normal;
 
@@ -449,6 +453,7 @@ __global__ void computeIntersections_FullVol(
 __global__ void sampleParticipatingMedium_FullVol(
 	int num_paths,
 	int max_depth,
+	int depth,
 	PathSegment* pathSegments,
 	Material* materials,
 	ShadeableIntersection* intersections,
@@ -463,14 +468,19 @@ __global__ void sampleParticipatingMedium_FullVol(
 	Light* lights,
 	int num_lights,
 	BVHNode_GPU* bvh_nodes,
-	const nanovdb::NanoGrid<float>* media_density)
+	const nanovdb::NanoGrid<float>* media_density,
+	GuiParameters gui_params)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
 	{
-		if (pathSegments[idx].remainingBounces == 0) {
+		if (pathSegments[idx].remainingBounces <= 0) {
 			return;
 		}
+
+		/*if (depth == max_depth - 3 && pathSegments[idx].remainingBounces > 0) {
+			pathSegments[idx].accumulatedIrradiance += glm::vec3(0, 0, 1);
+		}*/
 
 		//// Ray from last real collision
 		//if (pathSegments[idx].prev_event_was_real) {
@@ -484,14 +494,14 @@ __global__ void sampleParticipatingMedium_FullVol(
 		int rayMediumIndex = pathSegments[idx].medium;
 		MediumInteraction mi;
 		mi.medium = -1;
-		glm::vec3 Tr;
+		glm::vec3 T_maj;
 		if (rayMediumIndex >= 0) {
 			if (media[rayMediumIndex].type == HOMOGENEOUS) {
 				pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
 				//pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
-				Tr = Sample_channel(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
+				T_maj = Sample_channel(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, gui_params, rng, u01);
 			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {
@@ -503,11 +513,11 @@ __global__ void sampleParticipatingMedium_FullVol(
 		bool scattered = false;
 		if (mi.medium >= 0) {
 			//pathSegments[idx].rayThroughput *= handleMediumInteraction(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], mi, media_density, rayMediumIndex, rng, u01);
-			scattered = handleMediumInteraction(idx, max_depth, Tr, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
-				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01);
+			scattered = handleMediumInteraction(idx, max_depth, T_maj, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
+				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
 		}
 
-		if (pathSegments[idx].remainingBounces == 0) {
+		if (pathSegments[idx].remainingBounces <= 0) {
 			return;
 		}
 
@@ -540,10 +550,24 @@ __global__ void sampleParticipatingMedium_FullVol(
 
 		if (intersections[idx].mi.medium == -1) {
 			if (material.emittance > 0.0f) {
-				//if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
+				if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
 					// only color lights on first hit
-					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
-				//}
+					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pathSegments[idx].r_u;
+				}
+				else {
+					int light_ID = -1;
+					for (int light_iter = 0; light_iter < num_lights; light_iter++) {
+						if (lights[light_iter].geom_ID == intersection.objID) {
+							light_ID = light_iter;
+							break;
+						}
+					}
+					float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
+					float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
+					pdf_L *= (1.0f / (float)num_lights);
+					pathSegments[idx].r_l *= pdf_L;
+					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+				}
 				pathSegments[idx].remainingBounces = 0;
 				return;
 			}
@@ -563,7 +587,7 @@ __global__ void russianRouletteKernel_FullVol(int iter, int num_paths, PathSegme
 
 	if (idx < num_paths)
 	{
-		if (pathSegments[idx].remainingBounces == 0) {
+		if (pathSegments[idx].remainingBounces <= 0) {
 			return;
 		}
 
@@ -629,7 +653,7 @@ struct is_done
 	__host__ __device__
 		bool operator()(const PathSegment &path)
 	{
-		return path.remainingBounces != 0;
+		return path.remainingBounces > 0;
 	}
 };
 
@@ -642,7 +666,7 @@ struct material_sort
 	}
 };
 
-void fullVolPathtrace(uchar4* pbo, int frame, int iter) {
+void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params) {
 
 	//std::cout << "============================== " << iter << " ==============================" << std::endl;
 
@@ -705,6 +729,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter) {
 		sampleParticipatingMedium_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
 			pixelcount_fullvol,
 			traceDepth,
+			depth,
 			dev_paths,
 			dev_materials,
 			dev_intersections,
@@ -719,7 +744,8 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter) {
 			dev_lights,
 			hst_scene->lights.size(),
 			dev_bvh_nodes,
-			dev_media_density);
+			dev_media_density,
+			gui_params);
 		
 		// RUSSIAN ROULETTE
 		/*if (depth > 4)
@@ -731,7 +757,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter) {
 				);
 		}*/
 
-		if (depth == traceDepth) { iterationComplete = true; }
+		if (depth == traceDepth + BOUNCE_PADDING) { iterationComplete = true; }
 
 		if (guiData != NULL)
 		{

@@ -188,8 +188,10 @@ void InitImguiData(GuiDataContainer* guiData)
 }
 
 
+static bool ui_hide = false;
+
 // LOOK: Un-Comment to check ImGui Usage
-void RenderImGui()
+void RenderImGui(int windowWidth, int windowHeight)
 {
 	mouseOverImGuiWinow = io->WantCaptureMouse;
 	ImGui_ImplOpenGL3_NewFrame();
@@ -202,8 +204,15 @@ void RenderImGui()
 	static float f = 0.0f;
 	static int counter = 0;
 
+	// Dear imgui define
+	ImVec2 minSize(500.f, 220.f);
+	ImVec2 maxSize((float)windowWidth * 0.75, (float)windowHeight * 0.3);
+	ImGui::SetNextWindowSizeConstraints(minSize, maxSize);
+	ImGui::StyleColorsDark();
+	ImGui::SetNextWindowPos(ui_hide ? ImVec2(-1000.f, -1000.f) : ImVec2(0.0f, 0.0f));
+
 	ImGui::Begin("Path Tracer Analytics");                  // Create a window called "Hello, world!" and append into it.
-	
+	ImGui::SetWindowFontScale(1);
 	// LOOK: Un-Comment to check the output window and usage
 	//ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
 	//ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
@@ -218,6 +227,27 @@ void RenderImGui()
 	//ImGui::Text("counter = %d", counter);
 	ImGui::Text("Traced Depth %d", imguiData->TracedDepth);
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+	
+	
+	
+
+	ImGui::Text("press H to hide GUI completely.");
+	if (ImGui::IsKeyPressed('H')) {
+		ui_hide = !ui_hide;
+	}
+
+	ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 128);
+	float* flfl[3] = { &ui_sigma_a.x, &ui_sigma_a.y, &ui_sigma_a.z };
+	float* flfssl[3] = { &ui_sigma_s.x, &ui_sigma_s.y, &ui_sigma_s.z };
+	//ImGui::SliderFloat("Absorption", &ui_sigma_a, 0.00001f, 1.0f);
+	//ImGui::SliderFloat("Scattering", &ui_sigma_s, 0.00001f, 1.0f);
+	ImGui::SliderFloat3("Absorption", *flfl, 0.00001f, 0.5f, "%.4f");
+	ImGui::SliderFloat3("Scattering", *flfssl, 0.00001f, 0.5f, "%.4f");
+	ImGui::SliderFloat("P Asymmetry", &ui_g, -1.0f, 1.0f);
+
+	
+	
+	
 	ImGui::End();
 
 
@@ -251,8 +281,10 @@ void mainLoop() {
 		// VAO, shader program, and texture already bound
 		glDrawElements(GL_TRIANGLES, 6,  GL_UNSIGNED_SHORT, 0);
 
-		// Render ImGui Stuff
-		RenderImGui();
+		// Draw imgui
+		int display_w, display_h;
+		glfwGetFramebufferSize(window, &display_w, &display_h);
+		RenderImGui(display_w, display_h);
 
 		glfwSwapBuffers(window);
 	}

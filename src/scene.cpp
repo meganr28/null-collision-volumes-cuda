@@ -13,7 +13,7 @@
 
 #define FULL_VOLUME_INTEGRATOR
 
-Scene::Scene(string filename) {
+Scene::Scene(string filename, GuiParameters& gui_params) {
     cout << "Reading scene from " << filename << " ..." << endl;
     cout << " " << endl;
     char* fname = (char*)filename.c_str();
@@ -30,15 +30,15 @@ Scene::Scene(string filename) {
         if (!line.empty()) {
             vector<string> tokens = utilityCore::tokenizeString(line);
             if (strcmp(tokens[0].c_str(), "MATERIAL") == 0) {
-                loadMaterial(tokens[1]);
+                loadMaterial(tokens[1], gui_params);
                 cout << " " << endl;
             } 
             else if (strcmp(tokens[0].c_str(), "MEDIUM") == 0) {
-                loadMedium(tokens[1]);
+                loadMedium(tokens[1], gui_params);
                 cout << " " << endl;
             }
             else if (strcmp(tokens[0].c_str(), "OBJECT") == 0) {
-                loadGeom(tokens[1]);
+                loadGeom(tokens[1], gui_params);
                 cout << " " << endl;
             }
             else if (strcmp(tokens[0].c_str(), "CAMERA") == 0) {
@@ -69,7 +69,7 @@ Scene::Scene(string filename) {
 
 }
 
-int Scene::loadGeom(string objectid) {
+int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
     int id = atoi(objectid.c_str());
     if (id != num_geoms) {
         cout << "ERROR: OBJECT ID does not match expected number of geoms" << endl;
@@ -354,7 +354,7 @@ int Scene::loadCamera() {
     return 1;
 }
 
-int Scene::loadMaterial(string materialid) {
+int Scene::loadMaterial(string materialid, GuiParameters& gui_params) {
     int id = atoi(materialid.c_str());
     if (id != materials.size()) {
         cout << "ERROR: MATERIAL ID does not match expected number of materials" << endl;
@@ -406,7 +406,7 @@ int Scene::loadMaterial(string materialid) {
     }
 }
 
-int Scene::loadMedium(string mediumid) {
+int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
     int id = atoi(mediumid.c_str());
     if (id != media.size()) {
         cout << "ERROR: MEDIUM ID does not match expected number of media" << endl;
@@ -524,17 +524,21 @@ int Scene::loadMedium(string mediumid) {
                 float sa = atof(tokens[1].c_str());
                 glm::vec3 sigma_a(sa, sa, sa);
                 newMedium.sigma_a = sigma_a;
+                gui_params.sigma_a = sigma_a;
             }
             else if (strcmp(tokens[0].c_str(), "SCATTERING") == 0) {
                 float ss = atof(tokens[1].c_str());
                 glm::vec3 sigma_s(ss, ss, ss);
                 newMedium.sigma_s = sigma_s;
+                gui_params.sigma_s = sigma_s;
             }
             else if (strcmp(tokens[0].c_str(), "ASYM_G") == 0) {
                 newMedium.g = atof(tokens[1].c_str());
+                gui_params.g = newMedium.g;
             }
         }
 #ifdef FULL_VOLUME_INTEGRATOR
+        
         newMedium.sigma_t = newMedium.maxDensity * (newMedium.sigma_a + newMedium.sigma_s);
         //newMedium.sigma_n = newMedium.sigma_t - newMedium.sigma_a - newMedium.sigma_s; TODO: find appropriate place to set sigma_n
 #else

@@ -489,7 +489,8 @@ __global__ void generateMediumDirectLightSample(
 	MISLightIntersection* direct_light_isects,
 	Light* lights,
 	int num_lights,
-	Geom* geoms
+	Geom* geoms,
+	GuiParameters gui_params
 )
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -521,6 +522,7 @@ __global__ void generateMediumDirectLightSample(
 			lights,
 			num_lights,
 			geoms,
+			gui_params,
 			rng,
 			u01);
 	}
@@ -538,7 +540,8 @@ __global__ void generateSurfaceDirectLightSample(
 	MISLightIntersection* direct_light_isects,
 	Light* lights,
 	int num_lights,
-	Geom* geoms
+	Geom* geoms,
+	GuiParameters gui_params
 )
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -597,6 +600,7 @@ __global__ void generateSurfaceDirectLightSample(
 			lights,
 			num_lights,
 			geoms,
+			gui_params,
 			rng,
 			u01);
 	}
@@ -845,7 +849,8 @@ __global__ void mediumSpawnPathSegment(
 	, int num_lights
 	, PathSegment* pathSegments
 	, Material* materials
-	, Medium* media) {
+	, Medium* media,
+	GuiParameters gui_params) {
 
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
@@ -872,7 +877,7 @@ __global__ void mediumSpawnPathSegment(
 		glm::vec3 wo = -pathSegments[idx].ray.direction;
 		glm::vec3 wi;
 		float pdf = 0.f;
-		Sample_p(wo, &wi, &pdf, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g);
+		Sample_p(wo, &wi, &pdf, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g, gui_params.g);
 
 
 		// Create new ray
@@ -1123,7 +1128,7 @@ struct material_sort
 	}
 };
 
-void volPathtrace(uchar4* pbo, int frame, int iter) {
+void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 
 	//std::cout << "============================== " << iter << " ==============================" << std::endl;
 
@@ -1201,7 +1206,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			dev_direct_light_isects,
 			dev_lights,
 			hst_scene->lights.size(),
-			dev_geoms);
+			dev_geoms,
+			gui_params);
 
 		generateSurfaceDirectLightSample << < numblocksPathSegmentTracing, blockSize1d >> > (
 			pixelcount_vol,
@@ -1214,7 +1220,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			dev_direct_light_isects,
 			dev_lights,
 			hst_scene->lights.size(),
-			dev_geoms);
+			dev_geoms,
+			gui_params);
 
 		computeVisVolumetric << < numblocksPathSegmentTracing, blockSize1d >> > (
 			pixelcount_vol,
@@ -1239,7 +1246,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter) {
 			hst_scene->lights.size(),
 			dev_paths,
 			dev_materials,
-			dev_media);
+			dev_media,
+			gui_params);
 
 		surfaceSpawnPathSegment << < numblocksPathSegmentTracing, blockSize1d >> > (
 			iter,

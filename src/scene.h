@@ -32,16 +32,16 @@ using namespace std;
 class Scene {
 private:
     ifstream fp_in;
-    int loadMaterial(string materialid);
-    int loadMedium(string mediumid);
-    int loadGeom(string objectid);
+    int loadMaterial(string materialid, GuiParameters& gui_params);
+    int loadMedium(string mediumid, GuiParameters& gui_params);
+    int loadGeom(string objectid, GuiParameters& gui_params);
     int loadGLTF(string objectid);
     int loadCamera();
 
 
 public:
 
-    Scene(string filename);
+    Scene(string filename, GuiParameters& gui_params);
     ~Scene();
 
     BVHNode* buildBVH(int start_index, int end_index);

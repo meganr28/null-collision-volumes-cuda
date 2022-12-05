@@ -18,6 +18,17 @@ static bool middleMousePressed = false;
 static double lastX;
 static double lastY;
 
+
+int ui_max_ray_depth = 8;
+int last_max_ray_depth = 8;
+glm::vec3 ui_sigma_a = glm::vec3(0.15f);
+glm::vec3 last_sigma_a = glm::vec3(0.15f);
+glm::vec3 ui_sigma_s = glm::vec3(0.15f);
+glm::vec3 last_sigma_s = glm::vec3(0.15f);
+float ui_g= 0.15f;
+float last_g = 0.15f;
+
+
 static bool camchanged = true;
 static float dtheta = 0, dphi = 0;
 static glm::vec3 cammove;
@@ -52,10 +63,24 @@ int main(int argc, char** argv) {
 	const char* sceneFile = argv[1];
 
 	// Load scene file
-	scene = new Scene(sceneFile);
+	GuiParameters read_scene_to_gui = { glm::vec3(0.15f), glm::vec3(0.15f), 0.15f };
+	scene = new Scene(sceneFile, read_scene_to_gui);
+	ui_max_ray_depth = scene->state.traceDepth;
+	last_max_ray_depth = scene->state.traceDepth;
+
+	if (scene->media.size() > 0) {
+		ui_sigma_a = read_scene_to_gui.sigma_a;
+		last_sigma_a = read_scene_to_gui.sigma_a;
+		ui_sigma_s = read_scene_to_gui.sigma_s;
+		last_sigma_s = read_scene_to_gui.sigma_s;
+		ui_g = read_scene_to_gui.g;
+		last_g = read_scene_to_gui.g;
+	}
 
 	//Create Instance for ImGUIData
 	guiData = new GuiDataContainer();
+
+	std::cout << glm::length(glm::vec3(0.02, 0.03, 0.01)) << std::endl;
 
 	// Set up camera stuff from loaded path tracer settings
 	iteration = 0;
@@ -127,6 +152,28 @@ void saveImage() {
 }
 
 void runCuda() {
+
+
+	if (last_max_ray_depth != ui_max_ray_depth) {
+		last_max_ray_depth = ui_max_ray_depth;
+		camchanged = true;
+		
+	}
+
+	if (last_sigma_a != ui_sigma_a) {
+		last_sigma_a = ui_sigma_a;
+		camchanged = true;
+	}
+	if (last_sigma_s != ui_sigma_s) {
+		last_sigma_s = ui_sigma_s;
+		camchanged = true;
+	}
+	if (last_g != ui_g) {
+		last_g = ui_g;
+		camchanged = true;
+	}
+
+
 	if (camchanged) {
 		iteration = 0;
 		Camera& cam = renderState->camera;
@@ -145,7 +192,16 @@ void runCuda() {
 		cameraPosition += cam.lookAt;
 		cam.position = cameraPosition;
 		camchanged = false;
+
+
+		scene->state.traceDepth = ui_max_ray_depth;
+
 	}
+
+	
+	GuiParameters gui_params = { glm::vec3(ui_sigma_a), glm::vec3(ui_sigma_s), ui_g };
+	//std::cout << gui_params.sigma_a[0] << " " << gui_params.sigma_a[1] << " " << gui_params.sigma_a[2] << std::endl;
+	//std::cout << gui_params.sigma_s[0] << " " << gui_params.sigma_s[1] << " " << gui_params.sigma_s[2] << std::endl;
 
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
@@ -175,10 +231,10 @@ void runCuda() {
 		pathtrace(pbo_dptr, frame, iteration);
 #endif
 #ifdef VOLUME_INTEGRATOR
-		volPathtrace(pbo_dptr, frame, iteration);
+		volPathtrace(pbo_dptr, frame, iteration, gui_params);
 #endif
 #ifdef FULL_VOLUME_INTEGRATOR
-		fullVolPathtrace(pbo_dptr, frame, iteration);
+		fullVolPathtrace(pbo_dptr, frame, iteration, gui_params);
 #endif
 		// unmap buffer object
 		cudaGLUnmapBufferObject(pbo);
