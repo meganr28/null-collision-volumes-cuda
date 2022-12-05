@@ -9,6 +9,14 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
   * [LinkedIn](https://www.linkedin.com/in/meganr25a949125/), [personal website](https://meganr28.github.io/)
 * Tested on: Windows 10, AMD Ryzen 9 5900HS with Radeon Graphics @ 3301 MHz 16GB, NVIDIA GeForce RTX 3060 Laptop GPU 6GB (Personal Computer)
 
+### Overview
+
+**Physically-based volume rendering** is widely used in the entertainment and scientific engineering fields for rendering phenomena such as clouds, fog, smoke, and fire. This usually involves complex lighting computations, especially for volumes that vary spatially and spectrally. Production renderers leverage multiple importance sampling (MIS) to accelerate image synthesis for rendering surfaces. MIS techniques for volumes are unbiased only for homogeneous media. Therefore, we require a new technique to perform MIS for heterogeneous media. 
+
+The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz/publications/miller19null.html) (Miller et al. 2019) enables us to use MIS for any media and generalizes previous techniques such as ratio tracking, delta tracking, and spectral tracking. It analytically solves for the pdf of a light path during runtime, allowing us to combine several sampling techniques at once using MIS. Additionally, null-scattering introduces fictitious matter into the volume, which does not affect light transport, but instead allows us to "homogenize" the total density and analytically sample collisions. We implement the null-scattering formulation in **CUDA** and use **NanoVDB** for loading volumetric data. 
+
+[Place representative images here]
+
 ### Presentations
 
 [Final Project Pitch](https://docs.google.com/presentation/d/1bVFEcVQq_lp9oRMo1wMy-prI_6DmvS1U/edit?usp=sharing&ouid=114838708762215680291&rtpof=true&sd=true)
@@ -16,6 +24,29 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
 [Milestone 1 Presentation](https://docs.google.com/presentation/d/14UCT0gwEhKlZwesXNz6KYzMYFSW_foeX/edit?usp=sharing&ouid=114838708762215680291&rtpof=true&sd=true)
 
 [Milestone 2 Presentation](https://docs.google.com/presentation/d/1hIc8dso9Vw6BNq6eRFusN4aV4GLUBG46/edit?usp=sharing&ouid=114838708762215680291&rtpof=true&sd=true)
+
+[Milestone 3 Presentation](https://docs.google.com/presentation/d/15A4sxapjhbVR1eCHo42OMfnLYpHewG0q/edit?usp=sharing&ouid=114838708762215680291&rtpof=true&sd=true)
+
+### Features Implemented
+
+- Completed
+    * Heterogeneous media
+      * Null-scattering MIS (next-event estimation and phase sampling)
+      * Delta tracking
+    * Homogeneous media
+    * Interactions between surface and media
+    * Volumes on the inside and outside of objects (medium interfaces)
+    * Handling spectrally-varying absorption and scattering coefficients
+    * Loading .vdb files
+- In-Progress 
+    * Spectral MIS (with [hero wavelength sampling](https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/))
+      
+### GUI Controls
+
+- Ray Depth - number of times light will bounce in each ray path
+- Absorption - amount of light absorbed while interacting with the medium (higher = darker)
+- Scattering - amount of light scattering inside of the medium (out-scattering and in-scattering)
+- Phase Asymmetry Factor - influences the direction of light scattering within the medium
 
 ### Build Instructions
 
@@ -67,3 +98,46 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 
 8. Include the appropriate header files in your project and see if you can build successfully. If not, check the OpenVDB site for [Troubleshooting tips](https://www.openvdb.org/documentation/doxygen/build.html#buildTroubleshooting). 
 9. Note that NanoVDB files are included in the `openvdb` directory that you cloned. 
+
+### Work-In-Progress Output
+
+#### Homogeneous Media
+
+##### Environment Volume
+
+| "Underwater" Spheres |  Fog Caustic |
+:-------------------------:|:-------------------------:
+![](img/milestone_1/underwater.PNG)  |  ![](img/milestone_1/igjod.PNG)
+
+##### Surface vs. Volume
+
+| Pure Glass |  Pure Volume |
+:-------------------------:|:-------------------------:
+![](img/milestone_1/surface_no_volume_dense.PNG)  |  ![](img/milestone_1/no_surface_volume_dense.PNG)
+
+##### Varying Phase Asymmetry 
+
+| Forward Scattering (positive g) |  Back Scattering (negative g) |
+:-------------------------:|:-------------------------:
+![](img/milestone_1/positive_g.PNG)  |  ![](img/milestone_1/negative_g.PNG)
+
+##### Varying Extinction (Absorption + Scattering) 
+
+| Extinction Value  |      Result |
+|:----------:    |:-------------:  |
+| Low Extinction        |  ![](img/milestone_1/surface_volume_low_both.PNG)   | 
+| High Extinction       |  ![](img/milestone_1/surface_volume_high_both.PNG)   |
+| High Scattering       |  ![](img/milestone_1/surface_volume_high_scattering.PNG)   |
+| High Absorption       |  ![](img/milestone_1/surface_volume_high_absorption.PNG)   |
+
+#### Heterogeneous Media with Delta Tracking
+
+#### Heterogeneous Media with Null-Scattering MIS
+
+### Performance
+
+#### Delta Tracking vs. Null Scattering MIS
+
+#### Varying Extinction and Phase Factors
+
+#### Ray Depth
