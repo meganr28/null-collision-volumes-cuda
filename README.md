@@ -15,7 +15,10 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
 
 The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz/publications/miller19null.html) (Miller et al. 2019) enables us to use MIS for any media and generalizes previous techniques such as ratio tracking, delta tracking, and spectral tracking. It analytically solves for the pdf of a light path during runtime, allowing us to combine several sampling techniques at once using MIS. Additionally, null-scattering introduces fictitious matter into the volume, which does not affect light transport, but instead allows us to "homogenize" the total density and analytically sample collisions. We implement the null-scattering formulation in **CUDA** and use **NanoVDB** for loading volumetric data. 
 
-[Place representative images here]
+<p align="center">
+  <img src="img/milestone_3/mulit_color_cloud.PNG" />
+</p>
+<p align="center"><em>Intel Cloud rendered with the null-scattering MIS framework</em></p>
 
 ### Presentations
 
@@ -39,6 +42,7 @@ The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz
     * Handling spectrally-varying absorption and scattering coefficients
     * Loading .vdb files
 - In-Progress 
+    * Debug and remove bias in null-scattering MIS renders (white pixels show up in renders)
     * Spectral MIS (with [hero wavelength sampling](https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/))
       
 ### GUI Controls
@@ -101,6 +105,8 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 
 ### Work-In-Progress Output
 
+These are some visual results from our implementation so far. We began by implementing a renderer for homogeneous media, which we later extended to include heterogeneous media with delta tracking (also based on null collisions). Lastly, we implemented the null-scattering formulation described in the paper above. We have encountered a bug preventing correct convergence (note the difference between the delta tracking and null-scattering MIS renders), but are working actively to fix this. 
+
 #### Homogeneous Media
 
 ##### Environment Volume
@@ -146,6 +152,8 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 | ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  |
 
 ### Performance
+
+These are initial performance results from our null-scattering MIS implementation. Although there is a bug preventing correct convergence in our renders, we can still see how the null-scattering formulation accelerates runtime when compared to delta tracking. When increasing ray depth, we do observe an increase in render time. All renders were done at a resolution of 1024 x 1024 with 17000 iterations. 
 
 #### Delta Tracking vs. Null Scattering MIS
 
