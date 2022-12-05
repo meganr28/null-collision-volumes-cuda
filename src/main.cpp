@@ -7,7 +7,7 @@
 
 //#define PATH_INTEGRATOR
 //#define VOLUME_INTEGRATOR
-#define FULL_VOLUME_INTEGRATOR
+//#define FULL_VOLUME_INTEGRATOR
 
 static std::string startTimeString;
 
@@ -18,6 +18,10 @@ static bool middleMousePressed = false;
 static double lastX;
 static double lastY;
 
+
+IntegratorType ui_integrator = NULL_SCATTERING_MIS;
+IntegratorType last_integrator = NULL_SCATTERING_MIS;
+IntegratorType previous_integrator = NULL_SCATTERING_MIS;
 
 int ui_max_ray_depth = 8;
 int last_max_ray_depth = 8;
@@ -30,6 +34,7 @@ float last_g = 0.15f;
 
 
 static bool camchanged = true;
+static bool integratorchanged = true;
 static float dtheta = 0, dphi = 0;
 static glm::vec3 cammove;
 
@@ -38,7 +43,6 @@ glm::vec3 cameraPosition;
 glm::vec3 ogLookAt; // for recentering the camera
 
 Scene* scene;
-GuiDataContainer* guiData;
 RenderState* renderState;
 int iteration;
 
@@ -77,9 +81,6 @@ int main(int argc, char** argv) {
 		last_g = read_scene_to_gui.g;
 	}
 
-	//Create Instance for ImGUIData
-	guiData = new GuiDataContainer();
-
 	std::cout << glm::length(glm::vec3(0.02, 0.03, 0.01)) << std::endl;
 
 	// Set up camera stuff from loaded path tracer settings
@@ -109,18 +110,6 @@ int main(int argc, char** argv) {
 
 	// Initialize CUDA and GL components
 	init();
-
-	// Initialize ImGui Data
-	InitImguiData(guiData);
-#ifdef PATH_INTEGRATOR
-	InitDataContainer(guiData);
-#endif
-#ifdef VOLUME_INTEGRATOR
-	InitDataContainer_Vol(guiData);
-#endif
-#ifdef FULL_VOLUME_INTEGRATOR
-	InitDataContainer_FullVol(guiData);
-#endif
 
 	// GLFW main loop
 	mainLoop();
@@ -173,6 +162,14 @@ void runCuda() {
 		camchanged = true;
 	}
 
+	if (last_integrator != ui_integrator) {
+		previous_integrator = last_integrator;
+		last_integrator = ui_integrator;
+		integratorchanged = true;
+		camchanged = true;
+
+	}
+
 
 	if (camchanged) {
 		iteration = 0;
@@ -198,25 +195,42 @@ void runCuda() {
 
 	}
 
-	
-	GuiParameters gui_params = { glm::vec3(ui_sigma_a), glm::vec3(ui_sigma_s), ui_g };
-	//std::cout << gui_params.sigma_a[0] << " " << gui_params.sigma_a[1] << " " << gui_params.sigma_a[2] << std::endl;
-	//std::cout << gui_params.sigma_s[0] << " " << gui_params.sigma_s[1] << " " << gui_params.sigma_s[2] << std::endl;
+	if (integratorchanged) {
+		if (previous_integrator == NULL_SCATTERING_MIS) {
+			fullVolPathtraceFree();
+		}
+		else if (previous_integrator == DELTA_TRACKING_NEE) {
+			volPathtraceFree();
+		}
 
+		if (ui_integrator == NULL_SCATTERING_MIS) {
+
+			fullVolPathtraceInit(scene);
+		}
+		else if (ui_integrator == DELTA_TRACKING_NEE) {
+
+			volPathtraceInit(scene);
+		}
+		integratorchanged = false;
+	}
+
+	
+	//GuiParameters gui_params = { glm::vec3(ui_sigma_a), glm::vec3(ui_sigma_s), ui_g };
+	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), ui_g };
+	
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
 	if (iteration == 0) {
+		if (ui_integrator == NULL_SCATTERING_MIS) {
+			fullVolResetImage();
+		}
+		else if (ui_integrator == DELTA_TRACKING_NEE) {
+			volResetImage();
+		}
+
 #ifdef PATH_INTEGRATOR
 		pathtraceFree();
 		pathtraceInit(scene);
-#endif
-#ifdef VOLUME_INTEGRATOR
-		volPathtraceFree();
-		volPathtraceInit(scene);
-#endif
-#ifdef FULL_VOLUME_INTEGRATOR
-		fullVolPathtraceFree();
-		fullVolPathtraceInit(scene);
 #endif
 	}
 
@@ -230,16 +244,18 @@ void runCuda() {
 #ifdef PATH_INTEGRATOR
 		pathtrace(pbo_dptr, frame, iteration);
 #endif
-#ifdef VOLUME_INTEGRATOR
-		volPathtrace(pbo_dptr, frame, iteration, gui_params);
-#endif
-#ifdef FULL_VOLUME_INTEGRATOR
-		fullVolPathtrace(pbo_dptr, frame, iteration, gui_params);
-#endif
+		if (ui_integrator == NULL_SCATTERING_MIS) {
+			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params);
+		}
+		else if (ui_integrator == DELTA_TRACKING_NEE) {
+			volPathtrace(pbo_dptr, frame, iteration, gui_params);
+		}
+		
+
 		// unmap buffer object
 		cudaGLUnmapBufferObject(pbo);
 	}
-	/*else {
+	/*lse {
 		saveImage();
 		pathtraceFree();
 		cudaDeviceReset();
@@ -287,8 +303,10 @@ void mousePositionCallback(GLFWwindow* window, double xpos, double ypos) {
 		camchanged = true;
 	}
 	else if (rightMousePressed) {
-		zoom += ((ypos - lastY) / height) * 7.5f;
-		zoom = std::fmax(0.1f, zoom);
+		renderState = &scene->state;
+		Camera& cam = renderState->camera;
+		zoom += ((ypos - lastY) / height) * 7.5f * glm::length(cam.position);
+		zoom = std::fmax(0.1f * glm::length(cam.position), zoom);
 		camchanged = true;
 	}
 	else if (middleMousePressed) {
@@ -301,8 +319,8 @@ void mousePositionCallback(GLFWwindow* window, double xpos, double ypos) {
 		right.y = 0.0f;
 		right = glm::normalize(right);
 
-		cam.lookAt -= (float)(xpos - lastX) * right * 0.01f;
-		cam.lookAt += (float)(ypos - lastY) * forward * 0.01f;
+		cam.lookAt -= (float)(xpos - lastX) * right * 0.01f * glm::length(cam.position) * 0.1f;
+		cam.lookAt += (float)(ypos - lastY) * forward * 0.01f * glm::length(cam.position) * 0.1f;
 		camchanged = true;
 	}
 	lastX = xpos;

@@ -60,7 +60,6 @@ thrust::default_random_engine makeSeededRandomEngine_Vol(int iter, int index, in
 }
 
 static Scene* hst_scene = NULL;
-static GuiDataContainer* guiData = NULL;
 static glm::vec3* dev_image = NULL;
 static Geom* dev_geoms = NULL;
 static Tri* dev_tris = NULL;
@@ -83,11 +82,6 @@ static glm::vec3* dev_sample_colors = NULL;
 
 int pixelcount_vol;
 
-void InitDataContainer_Vol(GuiDataContainer* imGuiData)
-{
-	guiData = imGuiData;
-}
-
 // TODO: remove these when done testing
 __global__ void grid_test_kernel(const nanovdb::NanoGrid<float>* deviceGrid)
 {
@@ -96,6 +90,10 @@ __global__ void grid_test_kernel(const nanovdb::NanoGrid<float>* deviceGrid)
 	int i = 97 + threadIdx.x;
 	auto gpuAcc = deviceGrid->getAccessor();
 	printf("(%3i,0,0) NanoVDB gpu: % -4.2f\n", i, gpuAcc.getValue(nanovdb::Coord(i, i, i)));
+}
+
+void volResetImage() {
+	cudaMemset(dev_image, 0, pixelcount_vol * sizeof(glm::vec3));
 }
 
 void volPathtraceInit(Scene* scene) {
@@ -446,7 +444,8 @@ __global__ void sampleParticipatingMedium(
 	PathSegment* pathSegments,
 	ShadeableIntersection* intersections,
 	Medium* media,
-	const nanovdb::NanoGrid<float>* media_density
+	const nanovdb::NanoGrid<float>* media_density,
+	GuiParameters gui_params
 )
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -467,7 +466,7 @@ __global__ void sampleParticipatingMedium(
 				pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
-				pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
+				pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, gui_params, rng, u01);
 			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) == 0.0f) {
@@ -620,6 +619,8 @@ __global__ void computeVisVolumetric(
 	, MISLightIntersection* direct_light_intersections
 	, BVHNode_GPU* bvh_nodes
 	, const nanovdb::NanoGrid<float>* media_density
+	, GuiParameters gui_params
+	
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -817,7 +818,7 @@ __global__ void computeVisVolumetric(
 					Tr *= Tr_homogeneous(media[r.medium], r.ray, t_min);
 				}
 				else {
-					Tr *= Tr_heterogeneous(media[r.medium], pathSegments[path_index], r, media_density, t_min, rng, u01);
+					Tr *= Tr_heterogeneous(media[r.medium], pathSegments[path_index], r, media_density, t_min, gui_params, rng, u01);
 				}
 			}
 
@@ -1191,7 +1192,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 			dev_paths,
 			dev_intersections,
 			dev_media,
-			dev_media_density);
+			dev_media_density,
+			gui_params);
 		
 		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distribution
 		// Else, handle surface interaction
@@ -1235,7 +1237,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 			hst_scene->media.size(),
 			dev_direct_light_isects,
 			dev_bvh_nodes,
-			dev_media_density
+			dev_media_density,
+			gui_params
 			);
 				
 		mediumSpawnPathSegment << < numblocksPathSegmentTracing, blockSize1d >> > (
@@ -1270,11 +1273,6 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 		}*/
 
 		if (depth == traceDepth) { iterationComplete = true; }
-
-		if (guiData != NULL)
-		{
-			guiData->TracedDepth = depth;
-		}
 	}
 
 

@@ -1,0 +1,72 @@
+
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	40 10 2
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	35
+
+// Diffuse white
+MATERIAL 1
+R_COLOR         0.85 0.81 0.78
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse red
+MATERIAL 2
+R_COLOR         0.63 0.065 0.05
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse green
+MATERIAL 3
+R_COLOR         0.14 0.45 0.091
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 4
+R_COLOR         0.85 0.81 0.78
+T_COLOR     	0.85 0.81 0.78
+DIFFUSE_BRDF
+IOR    			1.55
+EMITTANCE   	0
+
+// Heterogeneous medium
+MEDIUM 0
+heterogeneous
+../scenes/vdb/smoke.vdb
+ABSORPTION 0.00015814
+SCATTERING 0.007125
+ASYM_G     0.01
+
+// Camera
+CAMERA
+RES         1024 1024
+FOVY        19.5
+ITERATIONS  50000
+DEPTH       8
+FILE        cornell
+FOCAL_DISTANCE	17.9
+LENS_RADIUS		0.0
+MEDIUM      -1
+EYE         0.0 45.5 190
+LOOKAT      0 45 0
+UP          0 1 0
+
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+mediuminterface -1 -1
+TRANS       0 119.85 0
+ROTAT       90 0 0
+SCALE       60 60 1

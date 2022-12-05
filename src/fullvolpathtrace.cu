@@ -62,7 +62,6 @@ thrust::default_random_engine makeSeededRandomEngine_FullVol(int iter, int index
 }
 
 static Scene* hst_scene = NULL;
-static GuiDataContainer* guiData = NULL;
 static glm::vec3* dev_image = NULL;
 static Geom* dev_geoms = NULL;
 static Tri* dev_tris = NULL;
@@ -85,11 +84,6 @@ static glm::vec3* dev_sample_colors = NULL;
 
 int pixelcount_fullvol;
 
-void InitDataContainer_FullVol(GuiDataContainer* imGuiData)
-{
-	guiData = imGuiData;
-}
-
 // TODO: remove these when done testing
 __global__ void grid_test_kernel_FullVol(const nanovdb::NanoGrid<float>* deviceGrid)
 {
@@ -98,6 +92,10 @@ __global__ void grid_test_kernel_FullVol(const nanovdb::NanoGrid<float>* deviceG
 	int i = 97 + threadIdx.x;
 	auto gpuAcc = deviceGrid->getAccessor();
 	printf("(%3i,0,0) NanoVDB gpu: % -4.2f\n", i, gpuAcc.getValue(nanovdb::Coord(i, i, i)));
+}
+
+void fullVolResetImage() {
+	cudaMemset(dev_image, 0, pixelcount_fullvol * sizeof(glm::vec3));
 }
 
 void fullVolPathtraceInit(Scene* scene) {
@@ -758,11 +756,6 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 		}*/
 
 		if (depth == traceDepth + BOUNCE_PADDING) { iterationComplete = true; }
-
-		if (guiData != NULL)
-		{
-			guiData->TracedDepth = depth;
-		}
 	}
 
 

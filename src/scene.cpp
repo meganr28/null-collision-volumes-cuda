@@ -11,7 +11,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
-#define FULL_VOLUME_INTEGRATOR
+//#define FULL_VOLUME_INTEGRATOR
 
 Scene::Scene(string filename, GuiParameters& gui_params) {
     cout << "Reading scene from " << filename << " ..." << endl;

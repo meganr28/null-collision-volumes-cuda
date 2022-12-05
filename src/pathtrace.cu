@@ -63,7 +63,6 @@ thrust::default_random_engine makeSeededRandomEngine(int iter, int index, int de
 
 
 static Scene* hst_scene = NULL;
-static GuiDataContainer* guiData = NULL;
 static glm::vec3* dev_image = NULL;
 static Geom* dev_geoms = NULL;
 static Tri* dev_tris = NULL;
@@ -82,11 +81,6 @@ static MISLightIntersection* dev_bsdf_light_isects = NULL;
 static glm::vec3* dev_sample_colors = NULL;
 
 int pixelcount;
-
-void InitDataContainer(GuiDataContainer* imGuiData)
-{
-	guiData = imGuiData;
-}
 
 void pathtraceInit(Scene* scene) {
 
@@ -1344,13 +1338,6 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 				dev_paths
 				);
 
-		}
-
-		if (depth == traceDepth) { iterationComplete = true; }
-
-		if (guiData != NULL)
-		{
-			guiData->TracedDepth = depth;
 		}
 	}
 

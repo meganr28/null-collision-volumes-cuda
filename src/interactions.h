@@ -165,6 +165,10 @@ float Sample_p(const glm::vec3& wo, glm::vec3* wi, float* pdf, const glm::vec2& 
     return p;
 }
 
+inline __host__ __device__ glm::vec3 getSigmaT(const Medium& medium, GuiParameters& gui_params) {
+    return gui_params.sigma_a + gui_params.sigma_s;
+}
+
 inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_index)
 {
     // read density value from the grid
@@ -211,6 +215,7 @@ inline __host__ __device__ glm::vec3 Tr_heterogeneous(
     const MISLightRay& mis_ray, 
     const nanovdb::NanoGrid<float>* media_density,
     float t,
+    GuiParameters& gui_params,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
 {
@@ -236,7 +241,7 @@ inline __host__ __device__ glm::vec3 Tr_heterogeneous(
     t = glm::max(tMin, 0.0f);
     glm::vec3 samplePoint = localRay.origin + t * localRay.direction;
     while (true) {
-        t -= glm::log(1.0f - u01(rng)) * medium.invMaxDensity / medium.sigma_t[0];  // TODO: sigma_t is a float for heterogeneous medium
+        t -= glm::log(1.0f - u01(rng)) * medium.invMaxDensity / getSigmaT(medium, gui_params)[0];  // TODO: sigma_t is a float for heterogeneous medium
         if (t >= tMax) {
             break;
         }
@@ -293,6 +298,7 @@ glm::vec3 Sample_heterogeneous(
     MediumInteraction* mi,
     const nanovdb::NanoGrid<float>* media_density,
     int mediumIndex,
+    GuiParameters& gui_params,
     thrust::default_random_engine& rng, 
     thrust::uniform_real_distribution<float>& u01)
 {
@@ -318,7 +324,7 @@ glm::vec3 Sample_heterogeneous(
     t = glm::max(tMin, 0.0f);
     glm::vec3 samplePoint = localRay.origin + t * localRay.direction;
     while (true) {
-        t = -glm::log(1.0f - u01(rng)) * medium.invMaxDensity / medium.sigma_t[0]; // TODO: sigma_t is a float for heterogeneous medium
+        t = -glm::log(1.0f - u01(rng)) * medium.invMaxDensity / getSigmaT(medium, gui_params)[0]; // TODO: sigma_t is a float for heterogeneous medium
         if (t >= tMax) {
             break;
         }
@@ -328,7 +334,7 @@ glm::vec3 Sample_heterogeneous(
             mi->samplePoint = worldRay.origin + t * worldRay.direction;
             mi->wo = -segment.ray.direction;
             mi->medium = mediumIndex;
-            return medium.sigma_s / medium.sigma_t;
+            return gui_params.sigma_s / getSigmaT(medium, gui_params);
         }
         /*if (segment.remainingBounces > 0) {
             segment.remainingBounces--;

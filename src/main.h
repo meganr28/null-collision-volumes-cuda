@@ -38,6 +38,8 @@ extern int iteration;
 extern int width;
 extern int height;
 
+extern IntegratorType ui_integrator;
+
 extern int ui_max_ray_depth;
 extern glm::vec3 ui_sigma_a;
 extern glm::vec3 ui_sigma_s;

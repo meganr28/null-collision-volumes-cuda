@@ -12,6 +12,12 @@
 
 // VOLUME STRUCTS
 
+enum IntegratorType {
+    NULL_SCATTERING_MIS,
+    DELTA_TRACKING_NEE,
+    SURFACE_ONLY_MIS
+};
+
 enum MediumType {
     HOMOGENEOUS,
     HETEROGENEOUS,

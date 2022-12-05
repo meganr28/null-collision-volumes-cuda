@@ -11,7 +11,6 @@ GLuint pbo;
 GLuint displayImage;
 
 GLFWwindow* window;
-GuiDataContainer* imguiData = NULL;
 ImGuiIO* io = nullptr;
 bool mouseOverImGuiWinow = false;
 
@@ -182,11 +181,6 @@ bool init() {
 	return true;
 }
 
-void InitImguiData(GuiDataContainer* guiData)
-{
-	imguiData = guiData;
-}
-
 
 static bool ui_hide = false;
 
@@ -225,7 +219,6 @@ void RenderImGui(int windowWidth, int windowHeight)
 	//	counter++;
 	//ImGui::SameLine();
 	//ImGui::Text("counter = %d", counter);
-	ImGui::Text("Traced Depth %d", imguiData->TracedDepth);
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	
 	
@@ -235,6 +228,12 @@ void RenderImGui(int windowWidth, int windowHeight)
 	if (ImGui::IsKeyPressed('H')) {
 		ui_hide = !ui_hide;
 	}
+	static ImGuiComboFlags combo_flags = 0;
+	const char* items[] = { "Null-Scattering MIS", "Delta Tracking NEE", "Surface Only MIS" };
+	static int item_current_idx = 0; // Here we store our selection data as an index.
+	const char* combo_preview_value = items[item_current_idx];  // Pass in the preview value visible before opening the combo (it could be anything)
+	static int item_current_2 = 0;
+	ImGui::Combo("Integrator", (int*)&ui_integrator, "Null-Scattering MIS\0Delta Tracking NEE\0Surface\0\0");
 
 	ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 128);
 	float* flfl[3] = { &ui_sigma_a.x, &ui_sigma_a.y, &ui_sigma_a.z };
