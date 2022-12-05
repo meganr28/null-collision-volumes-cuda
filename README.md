@@ -132,7 +132,18 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 
 #### Heterogeneous Media with Delta Tracking
 
+| Scene  |      Result |
+|:----------:    |:-------------:  |
+| OpenVDB Smoke 1                    |  ![](img/milestone_2/cool_vortices.PNG)   | 
+| Intel Cloud (low resolution)       |  ![](img/milestone_2/intel_cloud.PNG)   |
+| Intel Cloud (medium resolution)    |  ![](img/milestone_2/intel_cloud_2.PNG)   |
+| OpenVDB Smoke 2                    |  ![](img/milestone_2/smoke2.PNG)   |
+
 #### Heterogeneous Media with Null-Scattering MIS
+
+| Delta Tracking  |  Null-Scattering (Unidirectional) | Null-Scattering MIS (NEE + Unidirectional) |
+|:----------:    |:-------------:  | :-------------:  |
+| ![](img/milestone_2/cool_vortices.PNG) |  ![](img/milestone_2/cool_vortices.PNG)  |  ![](img/milestone_2/cool_vortices.PNG)  |
 
 ### Performance
 
