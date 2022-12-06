@@ -1,7 +1,7 @@
 
 // Emissive material (light)
 MATERIAL 		0
-R_COLOR        	40 10 2
+R_COLOR        	40 40 40
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
@@ -43,16 +43,16 @@ EMITTANCE   	0
 MEDIUM 0
 heterogeneous
 ../scenes/vdb/smoke.vdb
-ABSORPTION 0.00814
-SCATTERING 0.00825
-ASYM_G     0.1
+ABSORPTION 0.000314
+SCATTERING 0.000314
+ASYM_G     0.001
 
 // Camera
 CAMERA
 RES         1024 1024
 FOVY        19.5
 ITERATIONS  17000
-DEPTH       128
+DEPTH       8
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0

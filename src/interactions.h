@@ -563,6 +563,9 @@ glm::vec3 Sample_channel_direct(
         glm::vec3 majorant = getMajorant(medium, gui_params);
 
         float pdf = T_maj[0] * majorant[channel];
+        if (pdf <= 0.000001f) {
+            return glm::vec3(0.0f);
+        }
         T_ray *= T_maj * null / pdf;
         direct_light_rays[idx].r_l *= T_maj * majorant / pdf;
         direct_light_rays[idx].r_u *= T_maj * null / pdf;
@@ -782,7 +785,7 @@ glm::vec3 computeVisibility(
         num_iters++;
         // We encountered a bounding box/entry/exit of a volume, so we must change our medium value, update the origin, and traverse again
         glm::vec3 old_origin = r.ray.origin;
-        r.ray.origin = old_origin + (r.ray.direction * (t_min + 0.01f));
+        r.ray.origin = old_origin + (r.ray.direction * (t_min + 0.0001f));
 
         // TODO: generalize to support both homogeneous and heterogeneous volumes
         /*r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
@@ -862,11 +865,11 @@ glm::vec3 directLightSample(
     glm::vec3 T_ray = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, tris_size, media, media_size, media_density,
         direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
     
-    direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L;
+    direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L / (float)num_lights;
     direct_light_rays[idx].r_u *= pathSegments[idx].r_u * phase_pdf;
     
     direct_light_isects[idx].LTE *= T_ray / (direct_light_rays[idx].r_l + direct_light_rays[idx].r_u);
-
+    //direct_light_isects[idx].LTE *= (float)num_lights * T_ray / (pdf_L);
     return direct_light_isects[idx].LTE;
 }
 
@@ -958,7 +961,7 @@ bool handleMediumInteraction(
     glm::vec3 scattering, absorption, null;
     getCoefficients(media_density, gui_params, media[mi.medium], mi.samplePoint, pathSegments[idx], scattering, absorption, null);
     
-    glm::vec3 majorant = getMajorant(media[mi.medium] , gui_params);
+    glm::vec3 majorant = getMajorant(media[mi.medium], gui_params);
     float pAbsorb = absorption[heroChannel] / majorant[heroChannel];
     float pScatter = scattering[heroChannel] / majorant[heroChannel];
     float pNull = 1.0f - pAbsorb - pScatter;
@@ -994,7 +997,7 @@ bool handleMediumInteraction(
             pathSegments[idx].remainingBounces = 0;
         }
         else {
-            pathSegments[idx].remainingBounces--;
+            //pathSegments[idx].remainingBounces--;
         }
         return true;
     }
@@ -1011,6 +1014,10 @@ bool handleMediumInteraction(
         }
 
         float pdf = T_maj[heroChannel] * scattering[heroChannel];
+        if (pdf <= 0.00001f) {
+            pathSegments[idx].remainingBounces = 0;
+            return false;
+        }
         pathSegments[idx].rayThroughput *= T_maj * scattering / pdf;
         pathSegments[idx].r_u *= T_maj * scattering / pdf;
 
