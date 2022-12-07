@@ -169,15 +169,18 @@ inline __host__ __device__ glm::vec3 getSigmaT(const Medium& medium, GuiParamete
     return gui_params.sigma_a + gui_params.sigma_s;
 }
 
-inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_index)
+inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_index, PathSegment& segment)
 {
     // read density value from the grid
-    glm::vec3 min_cell_index = glm::vec3(0, 0, 0);
-    glm::vec3 max_cell_index = glm::vec3(medium.gx, medium.gy, medium.gz);
-    if (sample_index.x < min_cell_index.x || sample_index.x >= max_cell_index.x ||
-        sample_index.y < min_cell_index.y || sample_index.y >= max_cell_index.y ||
-        sample_index.z < min_cell_index.z || sample_index.z >= max_cell_index.z)
+    //glm::vec3 min_cell_index = glm::vec3(medium.index_min, -medium.gx * 0.5f, -medium.gx * 0.5f);
+    //glm::vec3 max_cell_index = glm::vec3(medium.gx * 0.5f, medium.gx * 0.5f, medium.gx * 0.5f);
+    if (sample_index.x < medium.index_min.x || sample_index.x >= medium.index_max.x ||
+        sample_index.y < medium.index_min.y || sample_index.y >= medium.index_max.y ||
+        sample_index.z < medium.index_min.z || sample_index.z >= medium.index_max.z) {
+        //segment.accumulatedIrradiance += glm::vec3(1, 0, 0);
         return 0;
+    }
+        
     auto gpuAcc = media_density->getAccessor();
     auto density = gpuAcc.getValue(nanovdb::Coord(sample_index.x, sample_index.y, sample_index.z));
     /*if (glm::abs(density) < 0.001f) {
@@ -186,19 +189,21 @@ inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nan
     return (density >= 0.0f) ? density : -density;
 }
 
-inline __host__ __device__ float Density_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_point)
+inline __host__ __device__ float Density_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_point, PathSegment& segment)
 {
     // find the sample point's voxel
     glm::vec3 pSamples(sample_point.x * medium.gx - 0.5f, sample_point.y * medium.gy - 0.5f, sample_point.z * medium.gz - 0.5f);
+    pSamples += medium.index_min;
     glm::vec3 pi = glm::floor(pSamples);
     glm::vec3 d = pSamples - pi;
-    //return D_heterogeneous(medium, media_density, pi);
+    
+    //return D_heterogeneous(medium, media_density, pi, segment);
 
     // trilinear sampling of density values nearest to sampling point
-    float d00 = glm::mix(D_heterogeneous(medium, media_density, pi), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 0)), d.x);
-    float d10 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 0)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 0)), d.x);
-    float d01 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 0, 1)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 1)), d.x);
-    float d11 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 1)), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 1)), d.x);
+    float d00 = glm::mix(D_heterogeneous(medium, media_density, pi, segment), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 0), segment), d.x);
+    float d10 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 0), segment), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 0), segment), d.x);
+    float d01 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 0, 1), segment), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 0, 1), segment), d.x);
+    float d11 = glm::mix(D_heterogeneous(medium, media_density, pi + glm::vec3(0, 1, 1), segment), D_heterogeneous(medium, media_density, pi + glm::vec3(1, 1, 1), segment), d.x);
     float d0 = glm::mix(d00, d10, d.y);
     float d1 = glm::mix(d01, d11, d.y);
     return glm::mix(d0, d1, d.z);
@@ -247,7 +252,7 @@ inline __host__ __device__ glm::vec3 Tr_heterogeneous(
         }
 
         samplePoint = localRay.origin + t * localRay.direction;
-        float density = Density_heterogeneous(medium, media_density, samplePoint);
+        float density = Density_heterogeneous(medium, media_density, samplePoint, segment);
         Tr *= 1.0 - glm::max(0.0f, density * medium.invMaxDensity);
         num_iters++;
     }
@@ -330,7 +335,7 @@ glm::vec3 Sample_heterogeneous(
         }
 
         samplePoint = localRay.origin + t * localRay.direction;
-        if (Density_heterogeneous(medium, media_density, samplePoint) * medium.invMaxDensity > u01(rng)) {
+        if (Density_heterogeneous(medium, media_density, samplePoint, segment) * medium.invMaxDensity > u01(rng)) {
             mi->samplePoint = worldRay.origin + t * worldRay.direction;
             mi->wo = -segment.ray.direction;
             mi->medium = mediumIndex;
@@ -508,7 +513,7 @@ void getCoefficients(
     glm::vec3& null)
 {
     glm::vec3 localSamplePoint = glm::vec3(medium.worldToMedium * glm::vec4(samplePoint, 1.0));
-    float density = Density_heterogeneous(medium, media_density, localSamplePoint);
+    float density = Density_heterogeneous(medium, media_density, localSamplePoint, segment);
     //if (density <= 0.0001f) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
     scattering = density * glm::vec3(gui_params.sigma_s);
     absorption = density * glm::vec3(gui_params.sigma_a);
@@ -785,7 +790,7 @@ glm::vec3 computeVisibility(
         num_iters++;
         // We encountered a bounding box/entry/exit of a volume, so we must change our medium value, update the origin, and traverse again
         glm::vec3 old_origin = r.ray.origin;
-        r.ray.origin = old_origin + (r.ray.direction * (t_min + 0.0001f));
+        r.ray.origin = old_origin + (r.ray.direction * (t_min + 0.001f));
 
         // TODO: generalize to support both homogeneous and heterogeneous volumes
         /*r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
