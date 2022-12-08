@@ -38,16 +38,9 @@ DIFFUSE_BRDF
 IOR    			1.55
 EMITTANCE   	0
 
-// Homogeneous medium
-MEDIUM 0
-homogeneous
-ABSORPTION 0.2
-SCATTERING 0.6
-ASYM_G     0.8
-
 // Camera
 CAMERA
-RES         512 512
+RES         1024 1024
 FOVY        19.5
 ITERATIONS  5000
 DEPTH       5

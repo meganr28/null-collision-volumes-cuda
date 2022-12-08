@@ -44,15 +44,15 @@ MEDIUM 0
 heterogeneous
 ../scenes/vdb/bunny_cloud.vdb
 ABSORPTION 0.5
-SCATTERING 10.0
+SCATTERING 5.0
 ASYM_G     0.001
 
 // Camera
 CAMERA
-RES         512 512
+RES         1024 1024
 FOVY        19.5
 ITERATIONS  10000
-DEPTH       512
+DEPTH       64
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0

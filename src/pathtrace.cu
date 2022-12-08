@@ -129,6 +129,10 @@ void pathtraceInit(Scene* scene) {
 
 }
 
+void resetImage() {
+	cudaMemset(dev_image, 0, pixelcount * sizeof(glm::vec3));
+}
+
 void pathtraceFree() {
 	cudaFree(dev_image);  // no-op if dev_image is null
 	cudaFree(dev_paths);
@@ -1339,6 +1343,8 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 				);
 
 		}
+
+		if (depth == traceDepth) { iterationComplete = true; }
 	}
 
 

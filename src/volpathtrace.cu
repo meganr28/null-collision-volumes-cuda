@@ -29,8 +29,6 @@
 #define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
-#define BOUNCE_PADDING 16
-
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn_Vol(msg, FILENAME, __LINE__)
@@ -1278,7 +1276,7 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 				);
 		}*/
 
-		if (depth == traceDepth + BOUNCE_PADDING) { iterationComplete = true; }
+		if (depth == traceDepth) { iterationComplete = true; }
 	}
 
 
