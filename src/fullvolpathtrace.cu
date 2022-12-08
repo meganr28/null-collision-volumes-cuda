@@ -29,7 +29,7 @@
 #define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
-#define BOUNCE_PADDING 16
+#define BOUNCE_PADDING 128
 
 
 
@@ -680,7 +680,7 @@ struct material_sort
 	}
 };
 
-void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params) {
+void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params, int depth_padding) {
 
 	//std::cout << "============================== " << iter << " ==============================" << std::endl;
 
@@ -771,7 +771,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 				);
 		}*/
 
-		if (depth == traceDepth + BOUNCE_PADDING) { iterationComplete = true; }
+		if (depth == traceDepth + depth_padding) { iterationComplete = true; }
 	}
 
 

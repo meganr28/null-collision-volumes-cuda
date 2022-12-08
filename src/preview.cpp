@@ -235,7 +235,8 @@ void RenderImGui(int windowWidth, int windowHeight)
 	static int item_current_2 = 0;
 	ImGui::Combo("Integrator", (int*)&ui_integrator, "Null-Scattering MIS\0Delta Tracking NEE\0Surface\0\0");
 
-	ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 128);
+	ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 256);
+	ImGui::SliderInt("Extra Depth Padding", &ui_depth_padding, 0, 256);
 	float* flfl[3] = { &ui_sigma_a.x, &ui_sigma_a.y, &ui_sigma_a.z };
 	float* flfssl[3] = { &ui_sigma_s.x, &ui_sigma_s.y, &ui_sigma_s.z };
 	//ImGui::SliderFloat("Absorption", &ui_sigma_a, 0.00001f, 1.0f);

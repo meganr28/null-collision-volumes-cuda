@@ -41,6 +41,7 @@ extern int height;
 extern IntegratorType ui_integrator;
 
 extern int ui_max_ray_depth;
+extern int ui_depth_padding;
 extern glm::vec3 ui_sigma_a;
 extern glm::vec3 ui_sigma_s;
 extern float ui_g;

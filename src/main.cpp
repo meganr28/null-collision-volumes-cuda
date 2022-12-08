@@ -5,9 +5,7 @@
 #include "preview.h"
 #include <cstring>
 
-//#define PATH_INTEGRATOR
-//#define VOLUME_INTEGRATOR
-//#define FULL_VOLUME_INTEGRATOR
+#define DEFAULT_INTEGRATOR SURFACE_ONLY_MIS
 
 static std::string startTimeString;
 
@@ -19,12 +17,15 @@ static double lastX;
 static double lastY;
 
 
-IntegratorType ui_integrator = NULL_SCATTERING_MIS;
-IntegratorType last_integrator = NULL_SCATTERING_MIS;
-IntegratorType previous_integrator = NULL_SCATTERING_MIS;
+IntegratorType ui_integrator = DEFAULT_INTEGRATOR;
+IntegratorType last_integrator = DEFAULT_INTEGRATOR;
+IntegratorType previous_integrator = DEFAULT_INTEGRATOR;
 
 int ui_max_ray_depth = 8;
 int last_max_ray_depth = 8;
+int ui_depth_padding = 16;
+int last_depth_padding = 16;
+
 glm::vec3 ui_sigma_a = glm::vec3(0.15f);
 glm::vec3 last_sigma_a = glm::vec3(0.15f);
 glm::vec3 ui_sigma_s = glm::vec3(0.15f);
@@ -151,6 +152,12 @@ void runCuda() {
 		
 	}
 
+	if (last_depth_padding != ui_depth_padding) {
+		last_depth_padding = ui_depth_padding;
+		camchanged = true;
+
+	}
+
 	if (last_sigma_a != ui_sigma_a) {
 		last_sigma_a = ui_sigma_a;
 		camchanged = true;
@@ -214,6 +221,9 @@ void runCuda() {
 			
 			volPathtraceFree();
 		}
+		else if (previous_integrator == SURFACE_ONLY_MIS) {
+			pathtraceFree();
+		}
 
 		beginning = false;
 
@@ -224,6 +234,10 @@ void runCuda() {
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 
 			volPathtraceInit(scene);
+		}
+		else if (ui_integrator == SURFACE_ONLY_MIS) {
+
+			pathtraceInit(scene);
 		}
 		integratorchanged = false;
 	}
@@ -241,11 +255,9 @@ void runCuda() {
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 			volResetImage();
 		}
-
-#ifdef PATH_INTEGRATOR
-		pathtraceFree();
-		pathtraceInit(scene);
-#endif
+		else if (ui_integrator == SURFACE_ONLY_MIS) {
+			resetImage();
+		}
 	}
 
 	if (iteration < renderState->iterations) {
@@ -255,16 +267,16 @@ void runCuda() {
 
 		// execute the kernel
 		int frame = 0;
-#ifdef PATH_INTEGRATOR
-		pathtrace(pbo_dptr, frame, iteration);
-#endif
+
 		if (ui_integrator == NULL_SCATTERING_MIS) {
-			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params);
+			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params, ui_depth_padding);
 		}
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 			volPathtrace(pbo_dptr, frame, iteration, gui_params);
 		}
-		
+		else if (ui_integrator == SURFACE_ONLY_MIS) {
+			pathtrace(pbo_dptr, frame, iteration);
+		}
 
 		// unmap buffer object
 		cudaGLUnmapBufferObject(pbo);

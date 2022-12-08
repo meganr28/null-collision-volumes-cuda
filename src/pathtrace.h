@@ -8,6 +8,7 @@
 
 void pathtraceInit(Scene *scene);
 void pathtraceFree();
+void resetImage();
 void pathtrace(uchar4 *pbo, int frame, int iteration);
 
 void pathtraceInit_Single(Scene* scene);
