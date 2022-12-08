@@ -7,27 +7,40 @@
 
 #include <glm/gtx/string_cast.hpp>
 
-#define DEFAULT_INTEGRATOR SURFACE_ONLY_MIS
+#define DEFAULT_INTEGRATOR NULL_SCATTERING_MIS
 
 static std::string startTimeString;
 
-// For camera controls
+// Camera Controls
 static bool leftMousePressed = false;
 static bool rightMousePressed = false;
 static bool middleMousePressed = false;
 static double lastX;
 static double lastY;
 
-
+// Integrator Selection Parameters
 IntegratorType ui_integrator = DEFAULT_INTEGRATOR;
 IntegratorType last_integrator = DEFAULT_INTEGRATOR;
 IntegratorType previous_integrator = DEFAULT_INTEGRATOR;
 
+// Path Tracing Parameters
 int ui_max_ray_depth = 8;
 int last_max_ray_depth = 8;
 int ui_depth_padding = 16;
 int last_depth_padding = 16;
+int ui_refresh_bit = 0;
+int last_refresh_bit = 0;
+int refresh_rate = 1;
 
+// Camera Parameters
+float ui_fov = 19.5f;
+float last_fov = 19.5f;
+float ui_focal_distance = 17.9f;
+float last_focal_distance = 17.9f;
+float ui_lens_radius = 0.0f;
+float last_lens_radius = 0.0f;
+
+// Volumetric Parameters
 glm::vec3 ui_sigma_a = glm::vec3(0.15f);
 glm::vec3 last_sigma_a = glm::vec3(0.15f);
 glm::vec3 ui_sigma_s = glm::vec3(0.15f);
@@ -56,6 +69,8 @@ int width;
 int height;
 
 bool beginning = true;
+
+
 
 //-------------------------------
 //-------------MAIN--------------
@@ -89,6 +104,12 @@ int main(int argc, char** argv) {
 
 	ui_max_ray_depth = scene->state.traceDepth;
 	last_max_ray_depth = scene->state.traceDepth;
+	ui_fov = scene->state.camera.fov.y;
+	last_fov = scene->state.camera.fov.y;
+	ui_focal_distance = scene->state.camera.focal_distance;
+	last_focal_distance = scene->state.camera.focal_distance;
+	ui_lens_radius = scene->state.camera.lens_radius;
+	last_lens_radius = scene->state.camera.lens_radius;
 
 	if (scene->media.size() > 0) {
 		ui_sigma_a = read_scene_to_gui.sigma_a;
@@ -99,7 +120,7 @@ int main(int argc, char** argv) {
 		last_g = read_scene_to_gui.g;
 	}
 
-	std::cout << glm::length(glm::vec3(0.02, 0.03, 0.01)) << std::endl;
+
 
 	// Set up camera stuff from loaded path tracer settings
 	iteration = 0;
@@ -172,6 +193,26 @@ void runCuda() {
 		camchanged = true;
 
 	}
+	if (last_refresh_bit != ui_refresh_bit) {
+		last_refresh_bit = ui_refresh_bit;
+		refresh_rate = 1 << ui_refresh_bit;
+		camchanged = true;
+	}
+
+	if (last_fov != ui_fov) {
+		last_fov = ui_fov;
+		camchanged = true;
+	}
+	if (last_focal_distance != ui_focal_distance) {
+		last_focal_distance = ui_focal_distance;
+		camchanged = true;
+	}
+	if (last_lens_radius != ui_lens_radius) {
+		last_lens_radius = ui_lens_radius;
+		camchanged = true;
+	}
+
+
 
 	if (last_sigma_a != ui_sigma_a) {
 		last_sigma_a = ui_sigma_a;
@@ -216,6 +257,12 @@ void runCuda() {
 
 
 		scene->state.traceDepth = ui_max_ray_depth;
+		float yscaled = tan(ui_fov * (PI / 180));
+		float xscaled = (yscaled * scene->state.camera.resolution.x) / scene->state.camera.resolution.y;
+		float fovx = (atan(xscaled) * 180) / PI;
+		scene->state.camera.fov = glm::vec2(fovx, ui_fov);
+		scene->state.camera.focal_distance = ui_focal_distance;
+		scene->state.camera.lens_radius = ui_lens_radius;
 
 	}
 
@@ -284,7 +331,7 @@ void runCuda() {
 		int frame = 0;
 
 		if (ui_integrator == NULL_SCATTERING_MIS) {
-			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params, ui_depth_padding);
+			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params, ui_depth_padding, refresh_rate, ui_refresh_bit);
 		}
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 			volPathtrace(pbo_dptr, frame, iteration, gui_params);

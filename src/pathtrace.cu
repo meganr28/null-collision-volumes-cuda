@@ -757,13 +757,6 @@ __global__ void shadeMaterialUberKernel(
 					bsdf_light_intersection.w * bsdf_light_intersection.LTE);
 		}
 
-
-		// GI LTE
-		/*scatterRay(pathSegments[idx], intersect_point,
-			intersection.surfaceNormal,
-			m,
-			rng, u01);*/
-
 		glm::vec3 wi = glm::vec3(0.0f);
 		glm::vec3 f = glm::vec3(0.0f);
 		float pdf = 0.0f;

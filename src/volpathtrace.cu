@@ -30,6 +30,7 @@
 #define ENABLE_SQUAREPLANES
 
 
+
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn_Vol(msg, FILENAME, __LINE__)
 void checkCUDAErrorFn_Vol(const char* msg, const char* file, int line) {
@@ -339,14 +340,12 @@ __global__ void computeIntersections_Vol(
 				isect.t = t;
 				isect.materialId = -1;
 				isect.surfaceNormal = glm::vec3(0.0f);
-
+				isect.tMin = tMin;
+				isect.tMax = tMax;
 
 				// TODO: change this to handle more advanced cases
 				isect.mediumInterface.inside = j;
 				isect.mediumInterface.outside = -1;
-
-				isect.tMin = tMin;
-				isect.tMax = tMax;
 			}
 		}
 
@@ -483,7 +482,6 @@ __global__ void generateSurfaceDirectLightSample(
 			pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
 			/*pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
 			intersection.mediumInterface.inside;*/
-
 			pathSegments[idx].medium = insideMedium(pathSegments[idx], intersection.tMin, intersection.tMax, 0) ? intersection.mediumInterface.inside : intersection.mediumInterface.outside;
 			//pathSegments[idx].remainingBounces--;
 			pathSegments[idx].prev_hit_null_material = true;

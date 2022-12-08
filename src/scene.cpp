@@ -393,9 +393,9 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
                 // Set inverse max density
                 float maxDensity = 0.0f;
                 int numVoxels = newMedium.gx * newMedium.gy * newMedium.gz;
-                for (int x = 0; x < newMedium.gx; ++x) {
-                    for (int y = 0; y < newMedium.gy; ++y) {
-                        for (int z = 0; z < newMedium.gz; ++z) {
+                for (int x = newMedium.index_min.x; x < newMedium.index_max.x; ++x) {
+                    for (int y = newMedium.index_min.y; y < newMedium.index_max.y; ++y) {
+                        for (int z = newMedium.index_min.z; z < newMedium.index_max.z; ++z) {
                             maxDensity = glm::max(maxDensity, dstAcc.getValue(nanovdb::Coord(x, y, z)));
                         }
                     }
