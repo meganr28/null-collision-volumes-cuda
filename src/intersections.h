@@ -151,14 +151,6 @@ inline __host__ __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, gl
 inline __host__ __device__ float triangleIntersectionTest(Tri tri, Ray& r,
     glm::vec3& barycenter) {
 
-    //bool intersect = glm::intersectRayTriangle(r.origin, r.direction,
-    //    tri.verts[0], tri.verts[1], tri.verts[2],
-    //    barycenter);
-
-    //if (!intersect) return MAX_INTERSECT_DIST;
-
-    //return barycenter.z;
-
     float t = glm::dot(tri.plane_normal, (tri.verts[0] - r.origin)) / glm::dot(tri.plane_normal, r.direction);
     if (t >= -0.0001f) {
     	glm::vec3 P = r.origin + t * r.direction;
@@ -198,7 +190,6 @@ inline __host__ __device__ bool devIsLeaf(const LBVHNode* node) {
  * the AABB always has side length of 1.0 and is centered at the origin.
  */
 inline __host__ __device__ bool aabbIntersectionTest(PathSegment& segment, const glm::vec3& aabbMin, const glm::vec3& aabbMax, Ray& r, float& tMin, float& tMax, float& t, bool tr_func) {
-//inline __host__ __device__ bool aabbIntersectionTest(PathSegment& segment, AABB aabb, Ray& r, float& t, bool tr_func) {
 
     float x1 = (aabbMin.x - r.origin.x) * r.direction_inv.x;
     float x2 = (aabbMax.x - r.origin.x) * r.direction_inv.x;
@@ -223,34 +214,6 @@ inline __host__ __device__ bool aabbIntersectionTest(PathSegment& segment, const
     if (t < 0.0f) t = tMax;
 
     return intersect;
-
-    //glm::vec3 invR = r.direction_inv;
-
-    //float x1 = (aabb.min.x - r.origin.x) * invR.x;
-    //float x2 = (aabb.max.x - r.origin.x) * invR.x;
-
-    //float tmin = glm::min(x1, x2);
-    //float tmax = glm::max(x1, x2);
-
-    //float y1 = (aabb.min.y - r.origin.y) * invR.y;
-    //float y2 = (aabb.max.y - r.origin.y) * invR.y;
-
-    //tmin = glm::max(tmin, glm::min(y1, y2));
-    //tmax = glm::min(tmax, glm::max(y1, y2));
-
-    //float z1 = (aabb.min.z - r.origin.z) * invR.z;
-    //float z2 = (aabb.max.z - r.origin.z) * invR.z;
-
-    //tmin = glm::max(tmin, glm::min(z1, z2));
-    //tmax = glm::min(tmax, glm::max(z1, z2));
-
-    //bool intersect = tmin <= tmax && tmax >= 0;
-    //t = (intersect) ? tmin : MAX_INTERSECT_DIST;
-    //if (t < 0.f) t = tmax;
-
-    //if (intersect) segment.accumulatedIrradiance += glm::vec3(10.0, 0.0, 0.0);
-
-    return intersect;
 }
 
 /**
@@ -270,7 +233,6 @@ inline __host__ __device__ float lbvhIntersectionTest(PathSegment& segment, cons
     float min_t = MAX_INTERSECT_DIST;
 
     // Push root node
-    int loopcounter = 0;
     stack[++stackPtr] = triangleCount;
     int currNodeIdx = stack[stackPtr];
     while (stackPtr >= 0)
@@ -284,12 +246,6 @@ inline __host__ __device__ float lbvhIntersectionTest(PathSegment& segment, cons
         float tMin, tMax, t;
         bool intersectLeft = aabbIntersectionTest(segment, left->aabb.min, left->aabb.max, r, tMin, tMax, t, tr_func);
         bool intersectRight = aabbIntersectionTest(segment, right->aabb.min, right->aabb.max, r, tMin, tMax, t, tr_func);
-
-        //if (loopcounter == 0 && intersectLeft) {
-        //    segment.accumulatedIrradiance += glm::vec3(10.0, 0.0, 0.0);
-        //    return t;
-        //}
-        //loopcounter++;
 
         // If intersection found, and they are leaf nodes, check for triangle intersections
         if (intersectLeft && devIsLeaf(left)) {

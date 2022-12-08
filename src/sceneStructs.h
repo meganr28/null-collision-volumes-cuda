@@ -158,6 +158,14 @@ struct Tri {
     void computeCentroid() {
         centroid = (verts[0] + verts[1] + verts[2]) / glm::vec3(3.f, 3.f, 3.f);
     }
+
+    void computePlaneNormal() {
+        plane_normal = glm::normalize(glm::cross(verts[1] - verts[0], verts[2] - verts[1]));
+    }
+
+    void computeArea() {
+        S = glm::length(glm::cross(verts[1] - verts[0], verts[2] - verts[1]));
+    }
 };
 
 struct Geom {

@@ -47,31 +47,11 @@ Scene::Scene(string filename, GuiParameters& gui_params) {
         }
     }
 
-    // Generate BVH
+    // Generate LBVH
     if (triangles.size() > 0)
     {
         generateLBVH(this);
     }
-
-    /*if (mesh_tris.size() > 0) {
-        root_node = buildBVH(0, mesh_tris.size());
-
-        reformatBVHToGPU();
-
-        std::cout << "num nodes: " << num_nodes << std::endl;
-    }*/
-
-    /*for (int i = 0; i < num_nodes; ++i) {
-        std::cout << "NODE " << i << std::endl;
-        std::cout << "   AABB_min: " << bvh_nodes_gpu[i].AABB_min.x << " " << bvh_nodes_gpu[i].AABB_min.y << " " << bvh_nodes_gpu[i].AABB_min.z << " " << std::endl;
-        std::cout << "   AABB_max: " << bvh_nodes_gpu[i].AABB_max.x << " " << bvh_nodes_gpu[i].AABB_max.y << " " << bvh_nodes_gpu[i].AABB_max.z << " " << std::endl;
-        std::cout << "   num_tris: " << bvh_nodes_gpu[i].num_tris << std::endl;
-        std::cout << "   tri_index: " << bvh_nodes_gpu[i].tri_index << std::endl;
-        std::cout << "   offset_to_second_child: " << bvh_nodes_gpu[i].offset_to_second_child << std::endl;
-        std::cout << "   split_axis: " << bvh_nodes_gpu[i].axis << std::endl;
-    }*/
-
-
 }
 
 int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
@@ -115,108 +95,11 @@ int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
             utilityCore::safeGetline(fp_in, line);
             if (!line.empty() && fp_in.good()) {
                 loadOBJ(newGeom, geomTris, line.c_str(), id);
-
-                //tinyobj::attrib_t attrib;
-                //std::vector<tinyobj::shape_t> shapes;
-                //std::vector<tinyobj::material_t> materials;
-                //std::string warn, err;
-
-                //if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, line.c_str())) {
-                //    throw std::runtime_error(warn + err);
-                //}
-
-                //// every mesh in the obj
-                //for (const tinyobj::shape_t& shape : shapes) {
-
-
-
-                //    // every tri in the mesh
-                //    for (int i = 0; i < shape.mesh.indices.size(); i += 3) {
-                //        Tri newTri;
-
-                //        
-
-                //        glm::vec3 newP = glm::vec3(0.0f);
-                //        glm::vec3 newN = glm::vec3(0.0f);
-                //        glm::vec2 newT = glm::vec2(0.0f);
-
-                //        for (int k = 0; k < 3; ++k) {
-
-                //            if (shape.mesh.indices[i + k].vertex_index != -1) {
-                //                newP = glm::vec3(attrib.vertices[3 * shape.mesh.indices[i + k].vertex_index + 0],
-                //                    attrib.vertices[3 * shape.mesh.indices[i + k].vertex_index + 1],
-                //                    attrib.vertices[3 * shape.mesh.indices[i + k].vertex_index + 2]);
-                //            }
-
-                //            if (shape.mesh.indices[i + k].texcoord_index != -1) {
-                //                newT = glm::vec2(
-                //                    attrib.texcoords[2 * shape.mesh.indices[i + k].texcoord_index + 0],
-                //                    1.0f - attrib.texcoords[2 * shape.mesh.indices[i + k].texcoord_index + 1]
-                //                );
-                //            }
-
-                //            if (shape.mesh.indices[i + k].normal_index != -1) {
-                //                newN = glm::vec3(
-                //                    attrib.normals[3 * shape.mesh.indices[i + k].normal_index + 0],
-                //                    attrib.normals[3 * shape.mesh.indices[i + k].normal_index + 1],
-                //                    attrib.normals[3 * shape.mesh.indices[i + k].normal_index + 2]
-                //                );
-                //            }
-
-                //            if (k == 0) {
-                //                newTri.p0 = newP;
-                //                newTri.n0 = newN;
-                //                newTri.t0 = newT;
-                //            }
-                //            else if (k == 1) {
-                //                newTri.p1 = newP;
-                //                newTri.n1 = newN;
-                //                newTri.t1 = newT;
-                //            }
-                //            else {
-                //                newTri.p2 = newP;
-                //                newTri.n2 = newN;
-                //                newTri.t2 = newT;
-                //            }
-                //        }
-
-
-                //        newTri.plane_normal = glm::normalize(glm::cross(newTri.p1 - newTri.p0, newTri.p2 - newTri.p1));
-                //        newTri.S = glm::length(glm::cross(newTri.p1 - newTri.p0, newTri.p2 - newTri.p1));
-
-                //        TriBounds newTriBounds;
-
-                //        newTriBounds.tri_ID = num_tris;
-                //        
-
-                //        float max_x = glm::max(glm::max(newTri.p0.x, newTri.p1.x), newTri.p2.x);
-                //        float max_y = glm::max(glm::max(newTri.p0.y, newTri.p1.y), newTri.p2.y);
-                //        float max_z = glm::max(glm::max(newTri.p0.z, newTri.p1.z), newTri.p2.z);
-                //        newTriBounds.AABB_max = glm::vec3(max_x, max_y, max_z);
-
-                //        float min_x = glm::min(glm::min(newTri.p0.x, newTri.p1.x), newTri.p2.x);
-                //        float min_y = glm::min(glm::min(newTri.p0.y, newTri.p1.y), newTri.p2.y);
-                //        float min_z = glm::min(glm::min(newTri.p0.z, newTri.p1.z), newTri.p2.z);
-                //        newTriBounds.AABB_min = glm::vec3(min_x, min_y, min_z);
-
-                //        float mid_x = (newTri.p0.x + newTri.p1.x + newTri.p2.x) / 3.0;
-                //        float mid_y = (newTri.p0.y + newTri.p1.y + newTri.p2.y) / 3.0;
-                //        float mid_z = (newTri.p0.z + newTri.p1.z + newTri.p2.z) / 3.0;
-                //        newTriBounds.AABB_centroid = glm::vec3(mid_x, mid_y, mid_z);
-
-                //        tri_bounds.push_back(newTriBounds);
-
-                //        mesh_tris.push_back(newTri);
-                //        num_tris++;
-                //    }
-                //    //std::cout << num_tris << std::endl;
-                //}
             }
         }
 
         //int ending_tri_size = mesh_tris.size();
         int ending_tri_size = starting_tri_size + geomTris;
-        //std::cout << starting_tri_size << " " << ending_tri_size << std::endl;
 
         //link material
         utilityCore::safeGetline(fp_in, line);
@@ -642,16 +525,13 @@ int Scene::loadOBJ(Geom &newGeom, int& geomTris, string filename, int objectid)
                 min = glm::min(min, triangle.verts[i]);
                 max = glm::max(max, triangle.verts[i]);
 
-                //std::cout << "Vert " << v << ": " << glm::to_string(triangle.verts[i]) << std::endl;
-
                 i++;
             }
             triangle.computeAABB();
-            //std::cout << "Triangle AABB: " << glm::to_string(triangle.aabb.min) << " " << glm::to_string(triangle.aabb.max) << std::endl;
             triangle.computeCentroid();
+            triangle.computePlaneNormal();
+            triangle.computeArea();
             triangle.objectId = f;
-            triangle.plane_normal = glm::normalize(glm::cross(triangle.verts[1] - triangle.verts[0], triangle.verts[2] - triangle.verts[1]));
-            triangle.S = glm::length(glm::cross(triangle.verts[1] - triangle.verts[0], triangle.verts[2] - triangle.verts[1]));
             mesh_triangles.push_back(triangle);
 
             index_offset += fv;
@@ -661,15 +541,12 @@ int Scene::loadOBJ(Geom &newGeom, int& geomTris, string filename, int objectid)
         mesh_aabbs[s].min = min;
         mesh_aabbs[s].max = max;
 
-        //std::cout << "Mesh AABB: " << glm::to_string(mesh_aabbs[s].min) << " " << glm::to_string(mesh_aabbs[s].max) << std::endl;
-
         // Set mesh attributes
         newGeom.aabb = mesh_aabbs[s];
         newGeom.startIdx = triangles.size();
         newGeom.triangleCount = mesh_triangles.size();
-        triangles.insert(triangles.end(), mesh_triangles.begin(), mesh_triangles.end());
         geomTris = newGeom.triangleCount;
-        //geoms.push_back(newGeom);
+        triangles.insert(triangles.end(), mesh_triangles.begin(), mesh_triangles.end());
         meshCount++;
     }
 

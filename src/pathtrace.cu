@@ -258,94 +258,8 @@ __global__ void computeIntersections(
 		isect.t = MAX_INTERSECT_DIST;
 
 		float t;
-
-
 		glm::vec3 tmp_normal;
 		int obj_ID = -1;
-
-#ifdef ENABLE_TRIS
-	//	if (tris_size != 0) {
-	//		int stack_pointer = 0;
-	//		int cur_node_index = 0;
-	//		int node_stack[32];
-	//		BVHNode_GPU cur_node;
-	//		glm::vec3 P;
-	//		glm::vec3 s;
-	//		float t1;
-	//		float t2;
-	//		float tmin;
-	//		float tmax;
-	//		while (true) {
-	//			cur_node = bvh_nodes[cur_node_index];
-
-	//			// (ray-aabb test node)
-	//			t1 = (cur_node.AABB_min.x - r.origin.x) * r.direction_inv.x;
-	//			t2 = (cur_node.AABB_max.x - r.origin.x) * r.direction_inv.x;
-
-	//			tmin = glm::min(t1, t2);
-	//			tmax = glm::max(t1, t2);
-
-	//			t1 = (cur_node.AABB_min.y - r.origin.y) * r.direction_inv.y;
-	//			t2 = (cur_node.AABB_max.y - r.origin.y) * r.direction_inv.y;
-
-	//			tmin = glm::max(tmin, glm::min(t1, t2));
-	//			tmax = glm::min(tmax, glm::max(t1, t2));
-
-	//			t1 = (cur_node.AABB_min.z - r.origin.z) * r.direction_inv.z;
-	//			t2 = (cur_node.AABB_max.z - r.origin.z) * r.direction_inv.z;
-
-	//			tmin = glm::max(tmin, glm::min(t1, t2));
-	//			tmax = glm::min(tmax, glm::max(t1, t2));
-
-	//			if (tmax >= tmin) {
-	//				// we intersected AABB
-	//				if (cur_node.tri_index != -1) {
-	//					// this is leaf node
-	//					// triangle intersection test
-	//					Tri tri = tris[cur_node.tri_index];
-
-	//					t = glm::dot(tri.plane_normal, (tri.p0 - r.origin)) / glm::dot(tri.plane_normal, r.direction);
-	//					if (t >= -0.0001f) {
-	//						P = r.origin + t * r.direction;
-
-	//						// barycentric coords
-	//						s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-	//							glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-	//							glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-	//						if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-	//							s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && isect.t > t) {
-	//							isect.t = t;
-	//							isect.materialId = tri.mat_ID;
-	//							isect.surfaceNormal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
-	//						}
-	//					}
-	//					// if last node in tree, we are done
-	//					if (stack_pointer == 0) {
-	//						break;
-	//					}
-	//					// otherwise need to check rest of the things in the stack
-	//					stack_pointer--;
-	//					cur_node_index = node_stack[stack_pointer];
-	//				}
-	//				else {	
-	//					node_stack[stack_pointer] = cur_node.offset_to_second_child;
-	//					stack_pointer++;
-	//					cur_node_index++;
-	//				}
-	//			}
-	//			else {
-	//				// didn't intersect AABB, remove from stack
-	//				if (stack_pointer == 0) {
-	//					break;
-	//				}
-	//				stack_pointer--;
-	//				cur_node_index = node_stack[stack_pointer];
-	//			}
-	//		}
-	//}
-#endif
-
 
 		for (int i = 0; i < geoms_size; ++i)
 		{
@@ -363,14 +277,12 @@ __global__ void computeIntersections(
 			}
 			else if (geom.type == CUBE) {
 #ifdef ENABLE_RECTS
-			t = boxIntersectionTest(geom, r, tmp_normal);
+				t = boxIntersectionTest(geom, r, tmp_normal);
 #endif
 			}
 			else if (geom.type == MESH) {
 #ifdef ENABLE_TRIS
 				t = lbvhIntersectionTest(pathSegments[path_index], lbvh, tris, r, geom.triangleCount, tmp_normal, true);
-				//AABB aabb = { glm::vec3(-0.288675, -1.0, -0.5), glm::vec3(0.577350, 1.0, 0.5) };
-				//aabbIntersectionTest(pathSegments[path_index], aabb, r, t, false);
 #endif
 			}
 
@@ -378,7 +290,6 @@ __global__ void computeIntersections(
 				continue; 
 			}
 			else if (isect.t > t) {
-				//if (geom.type == MESH) pathSegments[path_index].accumulatedIrradiance += glm::vec3(10.0, 0.0, 0.0);
 				isect.t = t;
 				isect.materialId = geom.materialid;
 				isect.surfaceNormal = tmp_normal;
@@ -671,92 +582,8 @@ __global__ void computeDirectLightIsects(
 
 		float t_min = MAX_INTERSECT_DIST;
 		int obj_ID = -1;
-
-
 		float t;
-
 		glm::vec3 tmp_normal;
-
-#ifdef ENABLE_TRIS
-	//	if (tris_size != 0) {
-	//		int stack_pointer = 0;
-	//		int cur_node_index = 0;
-	//		int node_stack[32];
-	//		BVHNode_GPU cur_node;
-	//		glm::vec3 P;
-	//		glm::vec3 s;
-	//		float t1;
-	//		float t2;
-	//		float tmin;
-	//		float tmax;
-	//		while (true) {
-	//			cur_node = bvh_nodes[cur_node_index];
-
-	//			// (ray-aabb test node)
-	//			t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
-	//			t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
-
-	//			tmin = glm::min(t1, t2);
-	//			tmax = glm::max(t1, t2);
-
-	//			t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
-	//			t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
-
-	//			tmin = glm::max(tmin, glm::min(t1, t2));
-	//			tmax = glm::min(tmax, glm::max(t1, t2));
-
-	//			t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
-	//			t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
-
-	//			tmin = glm::max(tmin, glm::min(t1, t2));
-	//			tmax = glm::min(tmax, glm::max(t1, t2));
-
-	//			if (tmax >= tmin) {
-	//				// we intersected AABB
-	//				if (cur_node.tri_index != -1) {
-	//					// this is leaf node
-	//					// triangle intersection test
-	//					Tri tri = tris[cur_node.tri_index];
-
-	//					t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
-	//					if (t >= -0.0001f) {
-	//						P = r.ray.origin + t * r.ray.direction;
-
-	//						// barycentric coords
-	//						s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-	//							glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-	//							glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-	//						if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-	//							s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
-	//							t_min = t;
-	//						}
-	//					}
-	//					// if last node in tree, we are done
-	//					if (stack_pointer == 0) {
-	//						break;
-	//					}
-	//					// otherwise need to check rest of the things in the stack
-	//					stack_pointer--;
-	//					cur_node_index = node_stack[stack_pointer];
-	//				}
-	//				else {
-	//					node_stack[stack_pointer] = cur_node.offset_to_second_child;
-	//					stack_pointer++;
-	//					cur_node_index++;
-	//				}
-	//			}
-	//			else {
-	//				// didn't intersect AABB, remove from stack
-	//				if (stack_pointer == 0) {
-	//					break;
-	//				}
-	//				stack_pointer--;
-	//				cur_node_index = node_stack[stack_pointer];
-	//			}
-	//		}
-	//}
-#endif
 
 		for (int i = 0; i < geoms_size; ++i)
 		{
@@ -834,91 +661,7 @@ __global__ void computeBSDFLightIsects(
 		float pdf_L_B = 0.0f;
 		float t;
 		glm::vec3 hit_normal;
-
 		glm::vec3 tmp_normal;
-
-#ifdef ENABLE_TRIS
-		//if (tris_size != 0) {
-		//	int stack_pointer = 0;
-		//	int cur_node_index = 0;
-		//	int node_stack[32];
-		//	BVHNode_GPU cur_node;
-		//	glm::vec3 P;
-		//	glm::vec3 s;
-		//	float t1;
-		//	float t2;
-		//	float tmin;
-		//	float tmax;
-		//	while (true) {
-		//		cur_node = bvh_nodes[cur_node_index];
-
-		//		// (ray-aabb test node)
-		//		t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
-		//		t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
-
-		//		tmin = glm::min(t1, t2);
-		//		tmax = glm::max(t1, t2);
-
-		//		t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
-		//		t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
-
-		//		tmin = glm::max(tmin, glm::min(t1, t2));
-		//		tmax = glm::min(tmax, glm::max(t1, t2));
-
-		//		t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
-		//		t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
-
-		//		tmin = glm::max(tmin, glm::min(t1, t2));
-		//		tmax = glm::min(tmax, glm::max(t1, t2));
-
-		//		if (tmax >= tmin) {
-		//			// we intersected AABB
-		//			if (cur_node.tri_index != -1) {
-		//				// this is leaf node
-		//				// triangle intersection test
-		//				Tri tri = tris[cur_node.tri_index];
-
-		//				t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
-		//				if (t >= -0.0001f) {
-		//					P = r.ray.origin + t * r.ray.direction;
-
-		//					// barycentric coords
-		//					s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-		//						glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-		//						glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-		//					if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-		//						s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
-		//						t_min = t;
-		//						hit_normal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
-		//					}
-		//				}
-		//				// if last node in tree, we are done
-		//				if (stack_pointer == 0) {
-		//					break;
-		//				}
-		//				// otherwise need to check rest of the things in the stack
-		//				stack_pointer--;
-		//				cur_node_index = node_stack[stack_pointer];
-		//			}
-		//			else {
-		//				node_stack[stack_pointer] = cur_node.offset_to_second_child;
-		//				stack_pointer++;
-		//				cur_node_index++;
-		//			}
-		//		}
-		//		else {
-		//			// didn't intersect AABB, remove from stack
-		//			if (stack_pointer == 0) {
-		//				break;
-		//			}
-		//			stack_pointer--;
-		//			cur_node_index = node_stack[stack_pointer];
-		//		}
-		//	}
-		//}
-#endif
-		
 
 		for (int i = 0; i < geoms_size; ++i)
 		{
@@ -1123,8 +866,6 @@ __global__ void shadeMaterialUberKernel(
 		}
 
 		pathSegments[idx].rayThroughput *= f * absDot / pdf;
-		//pathSegments[idx].accumulatedIrradiance += 0.5f * (intersection.surfaceNormal + glm::vec3(1.0f));
-		//pathSegments[idx].accumulatedIrradiance += 0.5f * (wi + glm::vec3(1.0f));
 
 		// Change ray direction
 		pathSegments[idx].ray.direction = wi;

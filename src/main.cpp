@@ -74,6 +74,7 @@ int main(int argc, char** argv) {
 	// Load scene file
 	GuiParameters read_scene_to_gui = { glm::vec3(0.15f), glm::vec3(0.15f), 0.15f };
 	scene = new Scene(sceneFile, read_scene_to_gui);
+
 	//std::cout << scene->lbvh.size() << std::endl;
 	//ofstream myfile;
 	//myfile.open("lbvh_test.txt");
