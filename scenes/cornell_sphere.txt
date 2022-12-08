@@ -32,9 +32,9 @@ EMITTANCE   	0
 
 // Specular white
 MATERIAL 4
-R_COLOR         0.85 0.81 0.78
-T_COLOR     	0.85 0.81 0.78
-DIFFUSE_BRDF
+R_COLOR         1.0 1.0 0.2
+T_COLOR     	0.9 0.9 1.0
+SPEC_GLASS
 IOR    			1.55
 EMITTANCE   	0
 
@@ -116,20 +116,11 @@ TRANS       0 2.5 5
 ROTAT       180 0 0
 SCALE       10 10 10
 
-// long cube
+// sphere
 OBJECT 7
-cube
+sphere
 material 4
 mediuminterface -1 -1
-TRANS       -2 0 -3
-ROTAT       0 27.5 0
-SCALE       3 6 3
-
-// short cube
-OBJECT 8
-cube
-material 4
-mediuminterface -1 -1
-TRANS       2 -1 -0.75
-ROTAT       0 -17.5 0
-SCALE       3 3 3
+TRANS       0 2 0
+ROTAT       0 0 0
+SCALE       6 6 6

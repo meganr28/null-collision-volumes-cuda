@@ -741,23 +741,25 @@ glm::vec3 computeVisibility(
             }
         }
 
-        for (int j = 0; j < media_size; j++) {
-            if (media[j].type == HOMOGENEOUS) continue;
+        if (media_size > 0) {
+            for (int j = 0; j < media_size; j++) {
+                if (media[j].type == HOMOGENEOUS) continue;
 
-            const Medium& medium = media[j];
-            bool intersectAABB = aabbIntersectionTest(pathSegments[idx], medium.aabb_min, medium.aabb_max, r.ray, tMin, tMax, t, false);
+                const Medium& medium = media[j];
+                bool intersectAABB = aabbIntersectionTest(pathSegments[idx], medium.aabb_min, medium.aabb_max, r.ray, tMin, tMax, t, false);
 
-            if (intersectAABB && t_min > t) {
-                t_min = t;
-                obj_ID = -2;
-                mat_id = -1;
+                if (intersectAABB && t_min > t) {
+                    t_min = t;
+                    obj_ID = -2;
+                    mat_id = -1;
 
-                // TODO: change this to handle more advanced cases
-                isect.mediumInterface.inside = j;
-                isect.mediumInterface.outside = -1;
+                    // TODO: change this to handle more advanced cases
+                    isect.mediumInterface.inside = j;
+                    isect.mediumInterface.outside = -1;
+                }
             }
         }
-
+        
         // if we did not intersect an object or intersected object is not a "invisible" bounding box, the ray is occluded
         if (obj_ID == -1 || (obj_ID != -1 && obj_ID != r.light_ID && mat_id != -1)) {
             num_iters++;
@@ -785,6 +787,9 @@ glm::vec3 computeVisibility(
         // if the intersected object IS the light source we selected, we are done
         if (obj_ID == r.light_ID) {
             num_iters++;
+            if (T_ray.x > 0.99f && T_ray.x < 1.01f && T_ray.y > 0.99f && T_ray.y < 1.01f && T_ray.z > 0.99f && T_ray.z < 1.01f) {
+                //pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
+            }
             return T_ray;
         }
 
@@ -804,6 +809,7 @@ glm::vec3 computeVisibility(
 inline __host__ __device__
 glm::vec3 directLightSample(
     int idx,
+    bool is_medium,
     PathSegment* pathSegments,
     Material* materials,
     ShadeableIntersection& intersection,
@@ -847,35 +853,61 @@ glm::vec3 directLightSample(
     direct_light_rays[idx].r_l = glm::vec3(1.0f);
     direct_light_rays[idx].r_u = glm::vec3(1.0f);
 
+    // SURFACE INTERACTION
+    float pdf_B = 0.0f;
 
-    // evaluate phase function for light sample direction
-    float p = evaluatePhaseHG(intersection.mi.wo, wi, media[intersection.mi.medium].g, gui_params.g);
-    float phase_pdf = p;
+    if (!is_medium) {
+        Material& material = materials[intersection.materialId];
+        float absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
 
-    if (phase_pdf < EPSILON) {
-        direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-        return glm::vec3(0.0f);
-    }
+        pdf_B = absDot * 0.31831f;
+        direct_light_rays[idx].f = material.R * 0.31831f; // INV_PI
 
-    direct_light_rays[idx].f = glm::vec3(p);
-    
-    if (pdf_L < EPSILON) {
-        direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-        return glm::vec3(0.0f);
+        // LTE = f * Li * absDot / pdf
+        if (pdf_L < 0.00001f) {
+            direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+            return glm::vec3(0.0f);
+        }
+        else if (pdf_B < 0.00001f) {
+            direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+            return glm::vec3(0.0f);
+        }
+        else {
+            direct_light_isects[idx].LTE = light_material.emittance * light_material.R * direct_light_rays[idx].f * absDot;
+        }
     }
     else {
-        direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f;
+        // evaluate phase function for light sample direction
+        float p = evaluatePhaseHG(intersection.mi.wo, wi, media[intersection.mi.medium].g, gui_params.g);
+        pdf_B = p;
+
+        if (pdf_B < EPSILON) {
+            direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+            return glm::vec3(0.0f);
+        }
+
+        direct_light_rays[idx].f = glm::vec3(p);
+
+        if (pdf_L < EPSILON) {
+            direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+            return glm::vec3(0.0f);
+        }
+        else {
+            direct_light_isects[idx].LTE = light_material.emittance * light_material.R * direct_light_rays[idx].f;
+        }
     }
+
+    
 
     // compute visibility
     glm::vec3 T_ray = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, tris_size, media, media_size, media_density,
         direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
-    
+
     direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L / (float)num_lights;
-    direct_light_rays[idx].r_u *= pathSegments[idx].r_u * phase_pdf;
+    direct_light_rays[idx].r_u *= pathSegments[idx].r_u * pdf_B;
     
     direct_light_isects[idx].LTE *= T_ray / (direct_light_rays[idx].r_l + direct_light_rays[idx].r_u);
-    //direct_light_isects[idx].LTE *= T_ray / (pdf_L);
+    //direct_light_isects[idx].LTE *= T_ray * (float)num_lights / pdf_L;
     return direct_light_isects[idx].LTE;
 }
 
@@ -1031,8 +1063,9 @@ bool handleMediumInteraction(
         bool sampleLight = (glm::length(pathSegments[idx].rayThroughput) > EPSILON || glm::length(pathSegments[idx].r_u) > EPSILON);
         if (sampleLight) {
             // Direct light sampling
-            glm::vec3 Ld = directLightSample(idx, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
+            glm::vec3 Ld = directLightSample(idx, true, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
                 media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
+            
             pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
             // Sample phase function

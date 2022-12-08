@@ -198,51 +198,52 @@ void RenderImGui(int windowWidth, int windowHeight)
 	static float f = 0.0f;
 	static int counter = 0;
 
-	// Dear imgui define
-	ImVec2 minSize(500.f, 220.f);
-	ImVec2 maxSize((float)windowWidth * 0.75, (float)windowHeight * 0.3);
-	ImGui::SetNextWindowSizeConstraints(minSize, maxSize);
 	ImGui::StyleColorsDark();
 	ImGui::SetNextWindowPos(ui_hide ? ImVec2(-1000.f, -1000.f) : ImVec2(0.0f, 0.0f));
 
-	ImGui::Begin("Path Tracer Analytics");                  // Create a window called "Hello, world!" and append into it.
+	ImGui::Begin("Path Tracer GUI");
+
 	ImGui::SetWindowFontScale(1);
-	// LOOK: Un-Comment to check the output window and usage
-	//ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-	//ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-	//ImGui::Checkbox("Another Window", &show_another_window);
 
-	//ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-	//ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-	//if (ImGui::Button("Button"))                            // Buttons return true when clicked (most widgets return true when edited/activated)
-	//	counter++;
-	//ImGui::SameLine();
-	//ImGui::Text("counter = %d", counter);
+	ImGui::Text("Render Resolution %i x %i", scene->state.camera.resolution.x, scene->state.camera.resolution.y);
 	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 	
 	
-	
-
-	ImGui::Text("press H to hide GUI completely.");
 	if (ImGui::IsKeyPressed('H')) {
 		ui_hide = !ui_hide;
 	}
-	static ImGuiComboFlags combo_flags = 0;
-	const char* items[] = { "Null-Scattering MIS", "Delta Tracking NEE", "Surface Only MIS" };
-	static int item_current_idx = 0; // Here we store our selection data as an index.
-	const char* combo_preview_value = items[item_current_idx];  // Pass in the preview value visible before opening the combo (it could be anything)
-	static int item_current_2 = 0;
-	ImGui::Combo("Integrator", (int*)&ui_integrator, "Null-Scattering MIS\0Delta Tracking NEE\0Surface\0\0");
+	if (ImGui::CollapsingHeader("Rendering Settings"))
+	{
+		static ImGuiComboFlags combo_flags = 0;
+		const char* items[] = { "Null-Scattering MIS", "Delta Tracking NEE", "Surface Only MIS" };
+		static int item_current_idx = 0; // Here we store our selection data as an index.
+		const char* combo_preview_value = items[item_current_idx];  // Pass in the preview value visible before opening the combo (it could be anything)
+		static int item_current_2 = 0;
+		ImGui::Combo("Integrator", (int*)&ui_integrator, "Null-Scattering MIS\0Delta Tracking NEE\0Surface MIS\0\0");
 
-	ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 128);
-	float* flfl[3] = { &ui_sigma_a.x, &ui_sigma_a.y, &ui_sigma_a.z };
-	float* flfssl[3] = { &ui_sigma_s.x, &ui_sigma_s.y, &ui_sigma_s.z };
-	//ImGui::SliderFloat("Absorption", &ui_sigma_a, 0.00001f, 1.0f);
-	//ImGui::SliderFloat("Scattering", &ui_sigma_s, 0.00001f, 1.0f);
-	ImGui::SliderFloat3("Absorption", *flfl, 0.00001f, 0.95f, "%.4f");
-	ImGui::SliderFloat3("Scattering", *flfssl, 0.00001f, 0.95f, "%.4f");
-	ImGui::SliderFloat("P Asymmetry", &ui_g, -1.0f, 1.0f);
+		ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 256);
+		ImGui::SliderInt("Extra Depth Padding", &ui_depth_padding, 0, 512);
+		ImGui::SliderInt("Refresh Rate (2^ iters)", &ui_refresh_bit, 0, 7);
+	}
+
+	if (ImGui::CollapsingHeader("Camera Settings"))
+	{
+		ImGui::SliderFloat("FOV", &ui_fov, 1.0f, 179.0f);
+		ImGui::SliderFloat("Focal Distance", &ui_focal_distance, 1.0f, 200.0f);
+		ImGui::SliderFloat("Lens Radius", &ui_lens_radius, 0.01f, 2.0f);
+	}
+
+	if (ImGui::CollapsingHeader("Volumetric Settings"))
+	{
+		float* flfl[3] = { &ui_sigma_a.x, &ui_sigma_a.y, &ui_sigma_a.z };
+		float* flfssl[3] = { &ui_sigma_s.x, &ui_sigma_s.y, &ui_sigma_s.z };
+		//ImGui::SliderFloat("Absorption", &ui_sigma_a, 0.00001f, 1.0f);
+		//ImGui::SliderFloat("Scattering", &ui_sigma_s, 0.00001f, 1.0f);
+		ImGui::SliderFloat3("Absorption", *flfl, 0.00001f, 2.95f, "%.4f");
+		ImGui::SliderFloat3("Scattering", *flfssl, 0.00001f, 2.95f, "%.4f");
+		ImGui::SliderFloat("P Asymmetry", &ui_g, -1.0f, 1.0f);
+	}
+
 
 	
 	

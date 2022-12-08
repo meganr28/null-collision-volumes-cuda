@@ -29,7 +29,6 @@
 #define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
-#define BOUNCE_PADDING 16
 
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -421,14 +420,12 @@ __global__ void computeIntersections_Vol(
 				isect.t = t;
 				isect.materialId = -1;
 				isect.surfaceNormal = glm::vec3(0.0f);
-
+				isect.tMin = tMin;
+				isect.tMax = tMax;
 
 				// TODO: change this to handle more advanced cases
 				isect.mediumInterface.inside = j;
 				isect.mediumInterface.outside = -1;
-
-				isect.tMin = tMin;
-				isect.tMax = tMax;
 			}
 		}
 
@@ -565,7 +562,6 @@ __global__ void generateSurfaceDirectLightSample(
 			pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
 			/*pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
 			intersection.mediumInterface.inside;*/
-
 			pathSegments[idx].medium = insideMedium(pathSegments[idx], intersection.tMin, intersection.tMax, 0) ? intersection.mediumInterface.inside : intersection.mediumInterface.outside;
 			//pathSegments[idx].remainingBounces--;
 			pathSegments[idx].prev_hit_null_material = true;
@@ -1278,7 +1274,7 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 				);
 		}*/
 
-		if (depth == traceDepth + BOUNCE_PADDING) { iterationComplete = true; }
+		if (depth == traceDepth) { iterationComplete = true; }
 	}
 
 

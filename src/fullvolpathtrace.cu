@@ -29,7 +29,7 @@
 #define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
-#define BOUNCE_PADDING 16
+#define BOUNCE_PADDING 128
 
 
 
@@ -544,10 +544,11 @@ __global__ void sampleParticipatingMedium_FullVol(
 		// Handle surface interaction
 		ShadeableIntersection intersection = intersections[idx];
 
+		// hit an invisible bounding surface
 		if (intersections[idx].mi.medium == -1) {
 			if (intersection.materialId < 0) {
 				// Change ray direction
-				pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
+				pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + ((intersection.t + 0.001f) * pathSegments[idx].ray.direction);
 				//pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside : intersection.mediumInterface.inside;
 				
 				// TODO make work for both volume trypes
@@ -562,25 +563,34 @@ __global__ void sampleParticipatingMedium_FullVol(
 
 		Material material = materials[intersection.materialId];
 
+
+		// Hit a light
 		if (intersections[idx].mi.medium == -1) {
+			
 			if (material.emittance > 0.0f) {
 				if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
 					// only color lights on first hit
 					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pathSegments[idx].r_u;
 				}
 				else {
-					int light_ID = -1;
-					for (int light_iter = 0; light_iter < num_lights; light_iter++) {
-						if (lights[light_iter].geom_ID == intersection.objID) {
-							light_ID = light_iter;
-							break;
-						}
+					//pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
+					if (glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction)) > 0.0001f) {
+
 					}
-					float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
-					float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
-					pdf_L *= (1.0f / (float)num_lights);
-					pathSegments[idx].r_l *= pdf_L;
-					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+					else {
+						int light_ID = -1;
+						for (int light_iter = 0; light_iter < num_lights; light_iter++) {
+							if (lights[light_iter].geom_ID == intersection.objID) {
+								light_ID = light_iter;
+								break;
+							}
+						}
+						float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
+						float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
+						pdf_L *= (1.0f / (float)num_lights);
+						pathSegments[idx].r_l *= pdf_L;
+						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+					}
 				}
 				pathSegments[idx].remainingBounces = 0;
 				return;
@@ -588,9 +598,134 @@ __global__ void sampleParticipatingMedium_FullVol(
 
 			pathSegments[idx].prev_hit_was_specular = material.type == SPEC_BRDF || material.type == SPEC_BTDF || material.type == SPEC_GLASS;
 
-			if (pathSegments[idx].prev_hit_was_specular) {
-				return;
+
+		}
+
+
+		// hit a normal surface
+		if (intersections[idx].mi.medium == -1) {
+
+
+			
+			if (!pathSegments[idx].prev_hit_was_specular) {
+
+				glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris, tris_size,
+					media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
+
+				pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
+
 			}
+
+			glm::vec3 wi = glm::vec3(0.0f);
+			glm::vec3 f = glm::vec3(0.0f);
+			float pdf = 0.0f;
+			float absDot = 0.0f;
+
+			// Physically based BSDF sampling influenced by PBRT
+			// https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
+			// https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
+
+			if (material.type == SPEC_BRDF) {
+				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
+				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+				pdf = 1.0f;
+				if (absDot >= -0.0001f && absDot <= -0.0001f) {
+					f = material.R;
+				}
+				else {
+					f = material.R / absDot;
+				}
+			}
+			else if (material.type == SPEC_BTDF) {
+				// spec refl
+				float eta = material.ior;
+				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0001f) {
+					// outside
+					eta = 1.0f / eta;
+					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
+				}
+				else {
+					// inside
+					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
+				}
+				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+				pdf = 1.0f;
+				if (glm::length(wi) <= 0.0001f) {
+					// total internal reflection
+					f = glm::vec3(0.0f);
+				}
+				else if (absDot >= -0.0001f && absDot <= -0.0001f) {
+					f = material.T;
+				}
+				else {
+					f = material.T / absDot;
+				}
+			}
+			else if (material.type == SPEC_GLASS) {
+				// spec glass
+				float eta = material.ior;
+				if (u01(rng) < 0.5f) {
+					// spec refl
+					wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
+					absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+					pdf = 1.0f;
+					if (absDot == 0.0f) {
+						f = material.R;
+					}
+					else {
+						f = material.R / absDot;
+					}
+					f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), material.ior);
+				}
+				else {
+					// spec refr
+					if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
+						// outside
+						eta = 1.0f / eta;
+						wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
+					}
+					else {
+						// inside
+						wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
+					}
+					absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+					pdf = 1.0f;
+					if (glm::length(wi) <= 0.0001f) {
+						// total internal reflection
+						f = glm::vec3(0.0f);
+					}
+					if (absDot == 0.0f) {
+						f = material.T;
+					}
+					else {
+						f = material.T / absDot;
+					}
+					f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), material.ior);
+				}
+				f *= 2.0f;
+			}
+			else {
+				// diffuse
+				wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+				if (material.type == DIFFUSE_BTDF) {
+					wi = -wi;
+				}
+				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+				pdf = absDot * 0.31831f;
+				f = material.R * 0.31831f;
+			}
+
+			pathSegments[idx].rayThroughput *= f * absDot / pdf;
+
+			
+			// Change ray direction
+			pathSegments[idx].r_l = pathSegments[idx].r_u / pdf;
+			pathSegments[idx].ray.origin = (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction) + (wi * 0.001f);
+			pathSegments[idx].ray.direction = wi;
+			pathSegments[idx].ray.direction_inv = 1.0f / wi;
+			pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
+				intersection.mediumInterface.inside; // TODO: change for hetero
+			pathSegments[idx].remainingBounces--;
 		}
 	}
 }
@@ -605,16 +740,19 @@ __global__ void russianRouletteKernel_FullVol(int iter, int num_paths, PathSegme
 			return;
 		}
 
-		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
-		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
-		float random_num = u01(rng);
-		float max_channel = glm::max(glm::max(pathSegments[idx].rayThroughput.r, pathSegments[idx].rayThroughput.g), pathSegments[idx].rayThroughput.b);
-		if (max_channel < random_num) {
-			pathSegments[idx].remainingBounces = 0;
+		if (pathSegments[idx].remainingBounces > 4) {
+			thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
+			thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
+			float random_num = u01(rng);
+			float max_channel = glm::max(glm::max(pathSegments[idx].rayThroughput.r, pathSegments[idx].rayThroughput.g), pathSegments[idx].rayThroughput.b);
+			if (max_channel < random_num) {
+				pathSegments[idx].remainingBounces = 0;
+			}
+			else {
+				pathSegments[idx].rayThroughput /= max_channel;
+			}
 		}
-		else {
-			pathSegments[idx].rayThroughput /= max_channel;
-		}
+
 	}
 }
 
@@ -680,7 +818,7 @@ struct material_sort
 	}
 };
 
-void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params) {
+void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params, int depth_padding, int refresh_rate, int refresh_bit) {
 
 	//std::cout << "============================== " << iter << " ==============================" << std::endl;
 
@@ -762,26 +900,30 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			gui_params);
 		
 		// RUSSIAN ROULETTE
-		/*if (depth > 4)
+		if (depth > 4)
 		{
 			russianRouletteKernel_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
 				iter,
 				pixelcount_fullvol,
 				dev_paths
 				);
-		}*/
+		}
 
-		if (depth == traceDepth + BOUNCE_PADDING) { iterationComplete = true; }
+		if (depth == traceDepth + depth_padding) { iterationComplete = true; }
 	}
 
 
 	// Assemble this iteration and apply it to the image
 	finalGather_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (pixelcount_fullvol, dev_image, dev_paths);
 
-	// Send results to OpenGL buffer for rendering
-	sendImageToPBO_FullVol << <blocksPerGrid2d, blockSize2d >> > (pbo, cam.resolution, iter, dev_image);
 
-	// Retrieve image from GPU
-	cudaMemcpy(hst_scene->state.image.data(), dev_image,
-		pixelcount_fullvol * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+	if ((iter & refresh_rate) >> refresh_bit || iter < 2) {
+		// 	// Send results to OpenGL buffer for rendering
+		sendImageToPBO_FullVol << <blocksPerGrid2d, blockSize2d >> > (pbo, cam.resolution, iter, dev_image);
+
+		// Retrieve image from GPU
+		cudaMemcpy(hst_scene->state.image.data(), dev_image,
+			pixelcount_fullvol * sizeof(glm::vec3), cudaMemcpyDeviceToHost);
+	}
+
 }

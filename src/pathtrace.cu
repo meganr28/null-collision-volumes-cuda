@@ -129,6 +129,10 @@ void pathtraceInit(Scene* scene) {
 
 }
 
+void resetImage() {
+	cudaMemset(dev_image, 0, pixelcount * sizeof(glm::vec3));
+}
+
 void pathtraceFree() {
 	cudaFree(dev_image);  // no-op if dev_image is null
 	cudaFree(dev_paths);
@@ -987,13 +991,6 @@ __global__ void shadeMaterialUberKernel(
 					bsdf_light_intersection.w * bsdf_light_intersection.LTE);
 		}
 
-
-		// GI LTE
-		/*scatterRay(pathSegments[idx], intersect_point,
-			intersection.surfaceNormal,
-			m,
-			rng, u01);*/
-
 		glm::vec3 wi = glm::vec3(0.0f);
 		glm::vec3 f = glm::vec3(0.0f);
 		float pdf = 0.0f;
@@ -1339,6 +1336,8 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 				);
 
 		}
+
+		if (depth == traceDepth) { iterationComplete = true; }
 	}
 
 
