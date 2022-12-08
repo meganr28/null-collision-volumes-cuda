@@ -44,6 +44,7 @@ public:
     Scene(string filename, GuiParameters& gui_params);
     ~Scene();
 
+    int loadOBJ(Geom& newGeom, int& geomTris, string filename, int objectid);
     BVHNode* buildBVH(int start_index, int end_index);
     void reformatBVHToGPU();
 

@@ -137,16 +137,34 @@ struct Tri {
     glm::vec2 t0;
     glm::vec2 t1;
     glm::vec2 t2;
+    // array versions
+    glm::vec3 verts[3];
+    glm::vec3 norms[3];
     // plane normal
     glm::vec3 plane_normal;
+    // centroid
+    glm::vec3 centroid;
     float S;
+    int objectId;
     int mat_ID;
     MediumInterface mediumInterface;
     AABB aabb;
+
+    void computeAABB() {
+        aabb.min = glm::min(verts[0], glm::min(verts[1], verts[2]));
+        aabb.max = glm::max(verts[0], glm::max(verts[1], verts[2]));
+    }
+
+    void computeCentroid() {
+        centroid = (verts[0] + verts[1] + verts[2]) / glm::vec3(3.f, 3.f, 3.f);
+    }
 };
 
 struct Geom {
     enum GeomType type;
+    AABB aabb;
+    int startIdx;
+    int triangleCount;
     int materialid;
     glm::vec3 translation;
     glm::vec3 rotation;
