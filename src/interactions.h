@@ -7,6 +7,7 @@
 
 
 //#define USE_SCHLICK_APPROX
+#define EPSILON  0.00000001f
 
 enum MediumEvent {
     ABSORB,
@@ -568,7 +569,7 @@ glm::vec3 Sample_channel_direct(
         glm::vec3 majorant = getMajorant(medium, gui_params);
 
         float pdf = T_maj[0] * majorant[channel];
-        if (pdf <= 0.000001f) {
+        if (pdf < EPSILON) {
             return glm::vec3(0.0f);
         }
         T_ray *= T_maj * null / pdf;
@@ -777,7 +778,7 @@ glm::vec3 computeVisibility(
             }
         }
 
-        if (glm::length(T_ray) <= 0.00001f) {
+        if (glm::length(T_ray) < EPSILON) {
             return glm::vec3(0.0f);
         }
 
@@ -847,18 +848,18 @@ glm::vec3 directLightSample(
     direct_light_rays[idx].r_u = glm::vec3(1.0f);
 
 
-    // evaluate phase function
+    // evaluate phase function for light sample direction
     float p = evaluatePhaseHG(intersection.mi.wo, wi, media[intersection.mi.medium].g, gui_params.g);
     float phase_pdf = p;
 
-    if (phase_pdf <= 0.0001f) {
+    if (phase_pdf < EPSILON) {
         direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
         return glm::vec3(0.0f);
     }
 
     direct_light_rays[idx].f = glm::vec3(p);
     
-    if (pdf_L <= 0.0001f) {
+    if (pdf_L < EPSILON) {
         direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
         return glm::vec3(0.0f);
     }
@@ -874,7 +875,7 @@ glm::vec3 directLightSample(
     direct_light_rays[idx].r_u *= pathSegments[idx].r_u * phase_pdf;
     
     direct_light_isects[idx].LTE *= T_ray / (direct_light_rays[idx].r_l + direct_light_rays[idx].r_u);
-    //direct_light_isects[idx].LTE *= (float)num_lights * T_ray / (pdf_L);
+    //direct_light_isects[idx].LTE *= T_ray / (pdf_L);
     return direct_light_isects[idx].LTE;
 }
 
@@ -986,7 +987,7 @@ bool handleMediumInteraction(
         //pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
         pathSegments[idx].prev_event_was_real = false;
         float pdf = T_maj[heroChannel] * null[heroChannel];
-        if (pdf <= 0.00001f) {
+        if (pdf < EPSILON) {
             pathSegments[idx].rayThroughput = glm::vec3(0.0f);
             return false;
         }
@@ -1000,6 +1001,7 @@ bool handleMediumInteraction(
         if (glm::length(pathSegments[idx].rayThroughput) <= 0.00001f || glm::length(pathSegments[idx].r_u) <= 0.00001f) {
             //pathSegments[idx].accumulatedIrradiance += glm::vec3(20, 0, 0);
             pathSegments[idx].remainingBounces = 0;
+            return false;
         }
         else {
             //pathSegments[idx].remainingBounces--;
@@ -1019,14 +1021,14 @@ bool handleMediumInteraction(
         }
 
         float pdf = T_maj[heroChannel] * scattering[heroChannel];
-        if (pdf <= 0.00001f) {
+        if (pdf < EPSILON) {
             pathSegments[idx].remainingBounces = 0;
             return false;
         }
         pathSegments[idx].rayThroughput *= T_maj * scattering / pdf;
         pathSegments[idx].r_u *= T_maj * scattering / pdf;
 
-        bool sampleLight = (glm::length(pathSegments[idx].rayThroughput) > 0.00001f || glm::length(pathSegments[idx].r_u) > 0.00001f);
+        bool sampleLight = (glm::length(pathSegments[idx].rayThroughput) > EPSILON || glm::length(pathSegments[idx].r_u) > EPSILON);
         if (sampleLight) {
             // Direct light sampling
             glm::vec3 Ld = directLightSample(idx, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
@@ -1037,7 +1039,7 @@ bool handleMediumInteraction(
             glm::vec3 phase_wi;
             float phase_pdf = 0.f;
             float phase_p = Sample_p(-pathSegments[idx].ray.direction, &phase_wi, &phase_pdf, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g, gui_params.g);
-            if (phase_pdf <= 0.00001f) {
+            if (phase_pdf < EPSILON) {
                 pathSegments[idx].remainingBounces = 0;
                 return false;
             }

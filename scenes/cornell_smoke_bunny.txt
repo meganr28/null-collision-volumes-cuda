@@ -1,11 +1,11 @@
 
 // Emissive material (light)
 MATERIAL 		0
-R_COLOR        	20 40 20
+R_COLOR        	1 1 1
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	5
+EMITTANCE   	1
 
 // Diffuse white
 MATERIAL 1
@@ -42,17 +42,17 @@ EMITTANCE   	0
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/explosion.vdb
-ABSORPTION 0.00314
-SCATTERING 0.00314
+../scenes/vdb/bunny_cloud.vdb
+ABSORPTION 0.5
+SCATTERING 10.0
 ASYM_G     0.001
 
 // Camera
 CAMERA
-RES         1024 1024
+RES         512 512
 FOVY        19.5
-ITERATIONS  1000
-DEPTH       2
+ITERATIONS  10000
+DEPTH       512
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
@@ -67,6 +67,6 @@ OBJECT 0
 squareplane
 material 0
 mediuminterface -1 -1
-TRANS       0 225.85 0
+TRANS       0 60.85 0
 ROTAT       90 0 0
 SCALE       60 60 1

@@ -204,11 +204,14 @@ struct MISLightIntersection {
 // 2) BSDF evaluation: generate a new ray
 struct ShadeableIntersection {
   float t;
+  float tMin; // for bounding box intersections for heterogeneous volumes: TODO REMOVE IF BETTER SOLUTION FOUND!!!
+  float tMax;
   glm::vec3 surfaceNormal;
   int objID;
   int materialId;
   MediumInterface mediumInterface;
   MediumInteraction mi;
+
 };
 
 struct GuiParameters {
