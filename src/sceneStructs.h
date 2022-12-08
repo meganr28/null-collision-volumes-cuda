@@ -85,6 +85,30 @@ struct TriBounds {
     int tri_ID;
 };
 
+struct MortonCode {
+    int objectId;
+    unsigned int code;
+};
+
+struct NodeRange {
+    int i;
+    int j;
+    int l;
+    int d;
+};
+
+struct AABB {
+    glm::vec3 min;
+    glm::vec3 max;
+};
+
+struct LBVHNode {
+    AABB aabb;
+    int objectId;
+    unsigned int left;
+    unsigned int right;
+};
+
 struct BVHNode {
     glm::vec3 AABB_min;
     glm::vec3 AABB_max;
@@ -118,6 +142,7 @@ struct Tri {
     float S;
     int mat_ID;
     MediumInterface mediumInterface;
+    AABB aabb;
 };
 
 struct Geom {
