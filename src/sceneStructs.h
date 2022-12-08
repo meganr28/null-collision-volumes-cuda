@@ -29,6 +29,8 @@ struct Medium {
     glm::mat4 worldToMedium; // Transform to local medium space
     glm::vec3 aabb_min;      // Minimum of aabb
     glm::vec3 aabb_max;      // Maximum of aabb
+    glm::vec3 index_min;  // transformation from world to index space
+    glm::vec3 index_max;  // transformation from world to index space
     glm::vec3 sigma_a;       // Absorption coefficient
     glm::vec3 sigma_s;       // Scattering coefficient
     glm::vec3 sigma_t;       // Extinction
@@ -202,11 +204,14 @@ struct MISLightIntersection {
 // 2) BSDF evaluation: generate a new ray
 struct ShadeableIntersection {
   float t;
+  float tMin; // for bounding box intersections for heterogeneous volumes: TODO REMOVE IF BETTER SOLUTION FOUND!!!
+  float tMax;
   glm::vec3 surfaceNormal;
   int objID;
   int materialId;
   MediumInterface mediumInterface;
   MediumInteraction mi;
+
 };
 
 struct GuiParameters {

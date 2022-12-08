@@ -11,8 +11,6 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
-//#define FULL_VOLUME_INTEGRATOR
-
 Scene::Scene(string filename, GuiParameters& gui_params) {
     cout << "Reading scene from " << filename << " ..." << endl;
     cout << " " << endl;
@@ -439,10 +437,13 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
 
                 file.open();
                 openvdb::io::File::NameIterator nameIter = file.beginName();
+                std::cout << "Grid name: " << nameIter.gridName() << std::endl;
+                
                 auto srcGrid = file.readGrid(nameIter.gridName());
 
                 // Convert the OpenVDB grid, srcGrid, into a NanoVDB grid handle.
                 gridHandle = nanovdb::openToNanoVDB<nanovdb::CudaDeviceBuffer>(srcGrid);
+
 
                 // Define a (raw) pointer to the NanoVDB grid on the host. Note we match the value type of the srcGrid!
                 auto* grid = gridHandle.grid<float>();
@@ -451,6 +452,9 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
 
                 // Get accessors for the two grids.Note that accessors only accelerate repeated access!
                 auto dstAcc = grid->getAccessor();
+
+                std::cout << "Grid count: " << grid->gridCount() << std::endl;
+
                 // Access and print out a cross-section of the narrow-band level set from the two grids
                 //for (int i = 0; i < 10; ++i) {
                 //    printf("(%3i,0,0) NanoVDB CPU: % 4.2f\n", i, dstAcc.getValue(nanovdb::Coord(i, i, i)));
@@ -458,12 +462,23 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
 
                 // load attributes into Medium struct and add to media list
                 auto boundingBox = grid->worldBBox();
+                auto min_index = grid->worldToIndex(boundingBox.min());
+                auto max_index = grid->worldToIndex(boundingBox.max());
+                std::cout << "Min index using transform:  " << min_index[0] << " " << min_index[1] << " " << min_index[2] << std::endl;
+                std::cout << "Max index using transform:  " << max_index[0] << " " << max_index[1] << " " << max_index[2] << std::endl;
+
+                
+
+
                 auto gridDim = boundingBox.dim();
                 nanovdb::Vec3R aabb_min = boundingBox.min();
                 nanovdb::Vec3R aabb_max = boundingBox.max();
 
                 newMedium.aabb_min = glm::vec3(aabb_min[0], aabb_min[1], aabb_min[2]);
                 newMedium.aabb_max = glm::vec3(aabb_max[0], aabb_max[1], aabb_max[2]);
+
+                newMedium.index_min = glm::vec3(min_index[0], min_index[1], min_index[2]);
+                newMedium.index_max = glm::vec3(max_index[0], max_index[1], max_index[2]);
                 
                 // Cell count in x, y, z
                 nanovdb::Vec3f gridExtent = nanovdb::Vec3f(aabb_max - aabb_min) / nanovdb::Vec3f(grid->voxelSize());
@@ -472,6 +487,8 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
                 newMedium.gz = gridExtent[2];
                 std::cout << "Fog Volume Sphere Min: " << newMedium.aabb_min[0] << " " << newMedium.aabb_min[1] << " " << newMedium.aabb_min[2] << std::endl;
                 std::cout << "Fog Volume Sphere Max: " << newMedium.aabb_max[0] << " " << newMedium.aabb_max[1] << " " << newMedium.aabb_max[2] << std::endl;
+                std::cout << "Fog Volume Index Min: " << newMedium.index_min[0] << " " << newMedium.index_min[1] << " " << newMedium.index_min[2] << std::endl;
+                std::cout << "Fog Volume Index Max: " << newMedium.index_max[0] << " " << newMedium.index_max[1] << " " << newMedium.index_max[2] << std::endl;
                 std::cout << "Voxel Size: " << grid->voxelSize()[0] << " " << grid->voxelSize()[1] << " " << grid->voxelSize()[2] << std::endl;
                 std::cout << "Fog Volume Sphere Extent: " << gridExtent[0] << " " << gridExtent[1] << " " << gridExtent[2] << std::endl;
 

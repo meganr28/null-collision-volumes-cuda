@@ -29,7 +29,7 @@
 #define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
-#define BOUNCE_PADDING 0
+#define BOUNCE_PADDING 16
 
 
 
@@ -101,7 +101,7 @@ void fullVolResetImage() {
 void fullVolPathtraceInit(Scene* scene) {
 
 	hst_scene = scene;
-
+	
 	const Camera& cam = hst_scene->state.camera;
 	pixelcount_fullvol = cam.resolution.x * cam.resolution.y;
 
@@ -435,6 +435,9 @@ __global__ void computeIntersections_FullVol(
 				// TODO: change this to handle more advanced cases
 				isect.mediumInterface.inside = j;
 				isect.mediumInterface.outside = -1;
+
+				isect.tMin = tMin;
+				isect.tMax = tMax;
 			}
 		}
 
@@ -476,6 +479,13 @@ __global__ void sampleParticipatingMedium_FullVol(
 			return;
 		}
 
+		if (glm::isnan(pathSegments[idx].accumulatedIrradiance.x) || glm::isnan(pathSegments[idx].accumulatedIrradiance.y) || glm::isnan(pathSegments[idx].accumulatedIrradiance.z)) {
+			pathSegments[idx].accumulatedIrradiance = glm::vec3(100000.0, 0.0, 0.0);
+			pathSegments[idx].rayThroughput = glm::vec3(10.0, 0.0, 0.0);
+			pathSegments[idx].remainingBounces = 0;
+			return;
+		}
+
 		/*if (depth == max_depth - 3 && pathSegments[idx].remainingBounces > 0) {
 			pathSegments[idx].accumulatedIrradiance += glm::vec3(0, 0, 1);
 		}*/
@@ -500,6 +510,7 @@ __global__ void sampleParticipatingMedium_FullVol(
 			else {
 				//pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
 				T_maj = Sample_channel(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, gui_params, rng, u01);
+				//if (glm::length(T_maj) < 0.f) pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
 			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {
@@ -524,10 +535,11 @@ __global__ void sampleParticipatingMedium_FullVol(
 		}
 
 
-
-		/*pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput
-			* directLightSample(idx, pathSegments, materials, intersections[idx], geoms, geoms_size, tris, tris_size,
-				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, rng, u01); // TODO: * uniform sample one light;*/
+		if (rayMediumIndex >= 0) {
+			pathSegments[idx].rayThroughput *= T_maj / T_maj[0];
+			pathSegments[idx].r_l *= T_maj / T_maj[0];
+			pathSegments[idx].r_u *= T_maj / T_maj[0];
+		}
 
 		// Handle surface interaction
 		ShadeableIntersection intersection = intersections[idx];
@@ -536,9 +548,13 @@ __global__ void sampleParticipatingMedium_FullVol(
 			if (intersection.materialId < 0) {
 				// Change ray direction
 				pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
-				pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
-					intersection.mediumInterface.inside;
-				pathSegments[idx].remainingBounces--;
+				//pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside : intersection.mediumInterface.inside;
+				
+				// TODO make work for both volume trypes
+				//if (glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > -0.01f && glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) < 0.01f) pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+				pathSegments[idx].medium = insideMedium(pathSegments[idx], intersection.tMin, intersection.tMax, 0) ? intersection.mediumInterface.inside : intersection.mediumInterface.outside;
+				
+				//pathSegments[idx].remainingBounces--;
 				pathSegments[idx].prev_hit_null_material = true;
 				return;
 			}
