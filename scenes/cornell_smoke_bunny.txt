@@ -44,7 +44,7 @@ MEDIUM 0
 heterogeneous
 ../scenes/vdb/bunny_cloud.vdb
 ABSORPTION 0.5
-SCATTERING 5.0
+SCATTERING 1.0
 ASYM_G     0.001
 
 // Camera
