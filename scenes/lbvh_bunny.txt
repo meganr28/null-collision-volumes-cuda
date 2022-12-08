@@ -56,13 +56,14 @@ EMITTANCE   	1
 
 // Camera
 CAMERA
-RES         1024 1024
+RES         800 800
 FOVY        19.5
-ITERATIONS  5000
-DEPTH       4
+ITERATIONS  4000
+DEPTH       1
 FILE        cornell
 FOCAL_DISTANCE	5.0
 LENS_RADIUS		0
+MEDIUM      -1
 EYE         0.0 2.5 18
 LOOKAT      0 2.5 0
 UP          0 1 0
@@ -71,6 +72,7 @@ UP          0 1 0
 OBJECT 0
 squareplane
 material 0
+mediuminterface -1 -1
 TRANS       0 7.45 0
 ROTAT       90 0 0
 SCALE       3 3 1
@@ -79,6 +81,7 @@ SCALE       3 3 1
 OBJECT 1
 squareplane
 material 1
+mediuminterface -1 -1
 TRANS       0 -2.5 0
 ROTAT       270 0 0
 SCALE       10 10 10
@@ -87,6 +90,7 @@ SCALE       10 10 10
 OBJECT 2
 squareplane
 material 1
+mediuminterface -1 -1
 TRANS       0 7.5 0
 ROTAT       90 0 0
 SCALE       10 10 10
@@ -95,6 +99,7 @@ SCALE       10 10 10
 OBJECT 3
 squareplane
 material 1
+mediuminterface -1 -1
 TRANS       0 2.5 -5
 ROTAT       0 0 0
 SCALE       10 10 10
@@ -103,6 +108,7 @@ SCALE       10 10 10
 OBJECT 4
 squareplane
 material 2
+mediuminterface -1 -1
 TRANS       -5 2.5 0
 ROTAT       0 90 0
 SCALE       10 10 10
@@ -111,6 +117,7 @@ SCALE       10 10 10
 OBJECT 5
 squareplane
 material 3
+mediuminterface -1 -1
 TRANS       5 2.5 0
 ROTAT       0 270 0
 SCALE       10 10 10
@@ -119,6 +126,7 @@ SCALE       10 10 10
 OBJECT 6
 squareplane
 material 1
+mediuminterface -1 -1
 TRANS       0 2.5 5
 ROTAT       180 0 0
 SCALE       10 10 10
@@ -126,8 +134,9 @@ SCALE       10 10 10
 // OBJTEST
 OBJECT 7 
 mesh
-../scenes/bunny.obj
-material 4
+../scenes/bunny_orig.obj
+material 1
+mediuminterface -1 -1
 TRANS       -2 0 0
 ROTAT       0 0 0
 SCALE       3 3 3
@@ -136,6 +145,7 @@ SCALE       3 3 3
 OBJECT 8
 squareplane
 material 6
+mediuminterface -1 -1
 TRANS       -4 4.45 0
 ROTAT       90 0 0
 SCALE       1 1 1
@@ -144,6 +154,7 @@ SCALE       1 1 1
 OBJECT 9
 squareplane
 material 6
+mediuminterface -1 -1
 TRANS       4 4.45 0
 ROTAT       90 0 0
 SCALE       1 1 1
@@ -152,6 +163,7 @@ SCALE       1 1 1
 OBJECT 10
 squareplane
 material 6
+mediuminterface -1 -1
 TRANS       -4 4.45 -4
 ROTAT       90 0 0
 SCALE       1 1 1
@@ -160,6 +172,7 @@ SCALE       1 1 1
 OBJECT 11
 squareplane
 material 6
+mediuminterface -1 -1
 TRANS       4 4.45 -4
 ROTAT       90 0 0
 SCALE       1 1 1
@@ -168,6 +181,7 @@ SCALE       1 1 1
 OBJECT 12
 squareplane
 material 6
+mediuminterface -1 -1
 TRANS       -4 4.45 4
 ROTAT       90 0 0
 SCALE       1 1 1
@@ -176,6 +190,7 @@ SCALE       1 1 1
 OBJECT 13
 squareplane
 material 6
+mediuminterface -1 -1
 TRANS       4 4.45 4
 ROTAT       90 0 0
 SCALE       1 1 1

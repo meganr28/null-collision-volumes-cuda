@@ -44,6 +44,7 @@ public:
     Scene(string filename, GuiParameters& gui_params);
     ~Scene();
 
+    int loadOBJ(Geom& newGeom, int& geomTris, string filename, int objectid);
     BVHNode* buildBVH(int start_index, int end_index);
     void reformatBVHToGPU();
 
@@ -61,6 +62,14 @@ public:
 
     std::vector<Tri> mesh_tris;
     std::vector<Tri> mesh_tris_sorted;
+
+    // LBVH arrays
+    std::vector<Tri> triangles;
+    std::vector<Tri> sorted_triangles;
+    std::vector<MortonCode> mcodes;
+    std::vector<LBVHNode> lbvh;
+    std::vector<AABB> mesh_aabbs;
+    int meshCount;
 
     BVHNode* root_node;
     int num_nodes = 0;

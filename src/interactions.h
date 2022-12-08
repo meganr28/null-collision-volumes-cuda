@@ -599,6 +599,7 @@ glm::vec3 computeVisibility(
     MISLightIntersection* direct_light_isects,
     Light* lights,
     int num_lights,
+    LBVHNode* lbvh,
     BVHNode_GPU* bvh_nodes,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
@@ -620,96 +621,6 @@ glm::vec3 computeVisibility(
         glm::vec3 tmp_normal;
         int mat_id = -1;
 
-        if (tris_size != 0) {
-            int stack_pointer = 0;
-            int cur_node_index = 0;
-            int node_stack[32];
-            BVHNode_GPU cur_node;
-            glm::vec3 P;
-            glm::vec3 s;
-            float t1;
-            float t2;
-            float tmin;
-            float tmax;
-            while (true) {
-                cur_node = bvh_nodes[cur_node_index];
-
-                // (ray-aabb test node)
-                t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
-                t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
-
-                tmin = glm::min(t1, t2);
-                tmax = glm::max(t1, t2);
-
-                t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
-                t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
-
-                tmin = glm::max(tmin, glm::min(t1, t2));
-                tmax = glm::min(tmax, glm::max(t1, t2));
-
-                t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
-                t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
-
-                tmin = glm::max(tmin, glm::min(t1, t2));
-                tmax = glm::min(tmax, glm::max(t1, t2));
-
-                if (tmax >= tmin) {
-                    // we intersected AABB
-                    if (cur_node.tri_index != -1) {
-                        // this is leaf node
-                        // triangle intersection test
-                        Tri tri = tris[cur_node.tri_index];
-
-
-                        t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
-                        if (t >= -0.0001f) {
-                            P = r.ray.origin + t * r.ray.direction;
-
-                            // barycentric coords
-                            s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-                                glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-                                glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-                            if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-                                s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
-                                t_min = t;
-                                tmp_normal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
-                                mat_id = tri.mat_ID;
-                                // Check if surface is medium transition
-                                if (IsMediumTransition(tri.mediumInterface)) {
-                                    isect.mediumInterface = tri.mediumInterface;
-                                }
-                                else {
-                                    isect.mediumInterface.inside = r.medium;
-                                    isect.mediumInterface.outside = r.medium;
-                                }
-                            }
-                        }
-                        // if last node in tree, we are done
-                        if (stack_pointer == 0) {
-                            break;
-                        }
-                        // otherwise need to check rest of the things in the stack
-                        stack_pointer--;
-                        cur_node_index = node_stack[stack_pointer];
-                    }
-                    else {
-                        node_stack[stack_pointer] = cur_node.offset_to_second_child;
-                        stack_pointer++;
-                        cur_node_index++;
-                    }
-                }
-                else {
-                    // didn't intersect AABB, remove from stack
-                    if (stack_pointer == 0) {
-                        break;
-                    }
-                    stack_pointer--;
-                    cur_node_index = node_stack[stack_pointer];
-                }
-            }
-        }
-
         for (int i = 0; i < geoms_size; ++i)
         {
             Geom& geom = geoms[i];
@@ -720,8 +631,11 @@ glm::vec3 computeVisibility(
             else if (geom.type == SQUAREPLANE) {
                 t = squareplaneIntersectionTest(geom, r.ray, tmp_normal);
             }
-            else {
+            else if (geom.type == CUBE) {
                 t = boxIntersectionTest(geom, r.ray, tmp_normal);
+            }
+            else if (geom.type == MESH) {
+                t = lbvhIntersectionTest(pathSegments[idx], lbvh, tris, r.ray, geom.triangleCount, tmp_normal, false);
             }
 
             if (t_min > t)
@@ -824,6 +738,7 @@ glm::vec3 directLightSample(
     MISLightIntersection* direct_light_isects,
     Light* lights,
     int num_lights,
+    LBVHNode* lbvh,
     BVHNode_GPU* bvh_nodes,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
@@ -901,8 +816,8 @@ glm::vec3 directLightSample(
 
     // compute visibility
     glm::vec3 T_ray = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, tris_size, media, media_size, media_density,
-        direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
-
+        direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
+ 
     direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L / (float)num_lights;
     direct_light_rays[idx].r_u *= pathSegments[idx].r_u * pdf_B;
     
@@ -989,6 +904,7 @@ bool handleMediumInteraction(
     MISLightIntersection* direct_light_isects,
     Light* lights,
     int num_lights,
+    LBVHNode* lbvh,
     BVHNode_GPU* bvh_nodes,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
@@ -1064,8 +980,8 @@ bool handleMediumInteraction(
         if (sampleLight) {
             // Direct light sampling
             glm::vec3 Ld = directLightSample(idx, true, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
-                media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
-            
+                media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
+
             pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
             // Sample phase function

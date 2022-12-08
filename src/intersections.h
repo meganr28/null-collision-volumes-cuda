@@ -141,10 +141,56 @@ inline __host__ __device__ float sphereIntersectionTest(Geom &sphere, Ray &r, gl
 }
 
 /**
+ * Test intersection between a ray and a transformed triangle.
+ *
+ * @param intersectionPoint  Output parameter for point of intersection.
+ * @param normal             Output parameter for surface normal.
+ * @param outside            Output param for whether the ray came from outside.
+ * @return                   Ray parameter `t` value. -1 if no intersection.
+ */
+inline __host__ __device__ float triangleIntersectionTest(Tri tri, Ray& r,
+    glm::vec3& barycenter) {
+
+    float t = glm::dot(tri.plane_normal, (tri.verts[0] - r.origin)) / glm::dot(tri.plane_normal, r.direction);
+    if (t >= -0.0001f) {
+    	glm::vec3 P = r.origin + t * r.direction;
+
+    	// barycentric coords
+    	barycenter = glm::vec3(glm::length(glm::cross(P - tri.verts[1], P - tri.verts[2])),
+    		glm::length(glm::cross(P - tri.verts[2], P - tri.verts[0])),
+    		glm::length(glm::cross(P - tri.verts[0], P - tri.verts[1]))) / tri.S;
+
+    	if (barycenter.x >= -0.0001f && barycenter.x <= 1.0001f && barycenter.y >= -0.0001f && barycenter.y <= 1.0001f &&
+            barycenter.z >= -0.0001f && barycenter.z <= 1.0001f && (barycenter.x + barycenter.y + barycenter.z <= 1.0001f) && (barycenter.x + barycenter.y + barycenter.z >= -0.0001f)) {
+            return t;
+    	}
+    }
+    return MAX_INTERSECT_DIST;
+}
+
+inline __host__ __device__ void lbvhIntersectTriangle(const Tri* tris, Ray& r, int objectId,
+    Tri& min_tri, glm::vec3& min_barycenter, float& min_t) {
+
+    glm::vec3 barycenter;
+    float t = triangleIntersectionTest(tris[objectId], r, barycenter);
+    if (t < min_t && t > 0.f)
+    {
+        min_t = t;
+        min_barycenter = barycenter;
+        min_tri = tris[objectId];
+    }
+}
+
+inline __host__ __device__ bool devIsLeaf(const LBVHNode* node) {
+    return node->left == 0xFFFFFFFF && node->right == 0xFFFFFFFF;
+}
+
+/**
  * Test intersection between a ray and a transformed AABB. Untransformed,
  * the AABB always has side length of 1.0 and is centered at the origin.
  */
 inline __host__ __device__ bool aabbIntersectionTest(PathSegment& segment, const glm::vec3& aabbMin, const glm::vec3& aabbMax, Ray& r, float& tMin, float& tMax, float& t, bool tr_func) {
+
     float x1 = (aabbMin.x - r.origin.x) * r.direction_inv.x;
     float x2 = (aabbMax.x - r.origin.x) * r.direction_inv.x;
 
@@ -171,33 +217,68 @@ inline __host__ __device__ bool aabbIntersectionTest(PathSegment& segment, const
 }
 
 /**
- * Test intersection between a ray and a triangle mesh. Untransformed,
- * the AABB always has side length of 1.0 and is centered at the origin.
+ * Test intersection between a ray and an LBVH.
+ *
+ * @param intersectionPoint  Output parameter for point of intersection.
+ * @param normal             Output parameter for surface normal.
+ * @param outside            Output param for whether the ray came from outside.
+ * @return                   Ray parameter `t` value. -1 if no intersection.
  */
-inline __host__ __device__ bool meshIntersectionTest(PathSegment& segment, const glm::vec3& aabbMin, const glm::vec3& aabbMax, Ray& r, float& tMin, float& tMax, float& t, bool tr_func) {
-    float x1 = (aabbMin.x - r.origin.x) * r.direction_inv.x;
-    float x2 = (aabbMax.x - r.origin.x) * r.direction_inv.x;
+inline __host__ __device__ float lbvhIntersectionTest(PathSegment& segment, const LBVHNode* nodes, const Tri* tris, Ray& r, int triangleCount, glm::vec3& normal, bool tr_func) {
+    float stack[16];
+    int stackPtr = -1;
 
-    tMin = glm::min(x1, x2);
-    tMax = glm::max(x1, x2);
+    Tri min_tri;
+    glm::vec3 min_barycenter;
+    float min_t = MAX_INTERSECT_DIST;
 
-    float y1 = (aabbMin.y - r.origin.y) * r.direction_inv.y;
-    float y2 = (aabbMax.y - r.origin.y) * r.direction_inv.y;
+    // Push root node
+    stack[++stackPtr] = triangleCount;
+    int currNodeIdx = stack[stackPtr];
+    while (stackPtr >= 0)
+    {
+        // Check intersection with left and right children
+        int leftChild = nodes[currNodeIdx].left;
+        int rightChild = nodes[currNodeIdx].right;
+        const LBVHNode* left = &nodes[leftChild];
+        const LBVHNode* right = &nodes[rightChild];
 
-    tMin = glm::max(tMin, glm::min(y1, y2));
-    tMax = glm::min(tMax, glm::max(y1, y2));
+        float tMin, tMax, t;
+        bool intersectLeft = aabbIntersectionTest(segment, left->aabb.min, left->aabb.max, r, tMin, tMax, t, tr_func);
+        bool intersectRight = aabbIntersectionTest(segment, right->aabb.min, right->aabb.max, r, tMin, tMax, t, tr_func);
 
-    float z1 = (aabbMin.z - r.origin.z) * r.direction_inv.z;
-    float z2 = (aabbMax.z - r.origin.z) * r.direction_inv.z;
+        // If intersection found, and they are leaf nodes, check for triangle intersections
+        if (intersectLeft && devIsLeaf(left)) {
+            lbvhIntersectTriangle(tris, r, leftChild, min_tri, min_barycenter, min_t);
+        }
+        if (intersectRight && devIsLeaf(right)) {
+            lbvhIntersectTriangle(tris, r, rightChild, min_tri, min_barycenter, min_t);
+        }
 
-    tMin = glm::max(tMin, glm::min(z1, z2));
-    tMax = glm::min(tMax, glm::max(z1, z2));
+        // If internal nodes, keep traversing
+        bool traverseLeftSubtree = (intersectLeft && !devIsLeaf(left));
+        bool traverseRightSubtree = (intersectRight && !devIsLeaf(right));
 
-    bool intersect = tMin <= tMax && tMax >= 0;
-    t = (intersect) ? tMin : MAX_INTERSECT_DIST;
-    if (t < 0.0f) t = tMax;
+        if (!traverseLeftSubtree && !traverseRightSubtree) {
+            // Pop node from stack
+            currNodeIdx = stack[stackPtr--];
+        }
+        else {
+            currNodeIdx = (traverseLeftSubtree) ? leftChild : rightChild;
+            if (traverseLeftSubtree && traverseRightSubtree) {
+                // Push right child onto stack
+                stack[++stackPtr] = rightChild;
+            }
+        }
+    }
 
-    return intersect;
+    // Find intersection point and normal
+    float u = min_barycenter.x;
+    float v = min_barycenter.y;
+    float w = 1.f - u - v;
+    normal = glm::normalize(min_barycenter.x * min_tri.norms[0] + min_barycenter.y * min_tri.norms[1] + min_barycenter.z * min_tri.norms[2]);
+
+    return min_t;
 }
 
 inline __host__ __device__ bool insideMedium(PathSegment& segment, const float tMin, const float tMax, const int num_iters) {
