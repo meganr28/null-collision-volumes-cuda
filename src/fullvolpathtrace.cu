@@ -180,6 +180,35 @@ void fullVolPathtraceFree() {
 	cudaFree(dev_bsdf_light_isects);
 }
 
+/**
+* Concentric Disk Sampling from PBRT Chapter 13.6.2
+*/
+__host__ __device__ glm::vec3 concentricSampleDisk_FullVol(glm::vec2& sample)
+{
+	// Map sample point (uniform random numbers) to range [-1, 1]
+	glm::vec2 mappedSample = 2.f * sample - glm::vec2(1.f, 1.f);
+
+	// Handle origin to avoid divide by zero
+	if (mappedSample.x == 0.f && mappedSample.y == 0.f) {
+		return glm::vec3(0.f);
+	}
+
+	// Apply concentric mapping to the adjusted sample point
+	float r = 0.f;
+	float theta = 0.f;
+	// Find r and theta depending on x and y coords of mapped point
+	if (std::abs(mappedSample.x) > std::abs(mappedSample.y)) {
+		r = mappedSample.x;
+		theta = (PI / 4.0f) * (mappedSample.y / mappedSample.x);
+	}
+	else {
+		r = mappedSample.y;
+		theta = (PI / 2.0f) - (PI / 4.0f) * (mappedSample.x / mappedSample.y);
+	}
+
+	return glm::vec3(r * glm::cos(theta), r * glm::sin(theta), 0.0f);
+}
+
 __global__ void generateRayFromThinLensCamera_FullVol(Camera cam, int iter, int traceDepth, float jitterX, float jitterY, glm::vec3 thinLensCamOrigin, glm::vec3 newRef,
 	PathSegment* pathSegments)
 {
@@ -219,7 +248,7 @@ __global__ void generateRayFromThinLensCamera_FullVol(Camera cam, int iter, int 
 	}
 }
 
-__global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDepth, float jitterX, float jitterY,
+__global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDepth,
 	PathSegment* pathSegments)
 {
 	__shared__ PathSegment mat[BLOCK_SIZE_2D][BLOCK_SIZE_2D];
@@ -227,6 +256,8 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
 	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 	int index = x + (y * cam.resolution.x);
+
+	thrust::uniform_real_distribution<float> upixel(0.0, 1.0f);
 
 	if (x < cam.resolution.x && y < cam.resolution.y) {
 		mat[threadIdx.x][threadIdx.y] = pathSegments[index];
@@ -243,14 +274,36 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		segment.prev_event_was_real = true;
 		segment.medium = cam.medium;
 
+		float jitterX = upixel(segment.rng_engine);
+		float jitterY = upixel(segment.rng_engine);
+
 		float jittered_x = ((float)x) + jitterX;
 		float jittered_y = ((float)y) + jitterY;
 
-		// TODO: implement antialiasing by jittering the ray
+		// Add antialiasing by jittering the ray
 		segment.ray.direction = glm::normalize(
 			cam.view - cam.right * cam.pixelLength.x * (jittered_x - (float)cam.resolution.x * 0.5f)
 			- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
 		);
+
+		// Add depth of field
+		if (cam.lens_radius > 0.0f) {
+			// Get sample on lens
+			glm::vec2 thinLensSample = glm::vec2(upixel(segment.rng_engine), upixel(segment.rng_engine));
+			glm::vec3 lensPoint = cam.lens_radius * concentricSampleDisk_FullVol(thinLensSample);
+
+			// Get focal point
+			float focalT = (cam.focal_distance / glm::length(cam.lookAt - cam.position));
+			glm::vec3 newRef = segment.ray.origin + focalT * (cam.lookAt - cam.position);
+
+			// Update ray
+			segment.ray.origin += lensPoint;
+			glm::vec3 newView = glm::normalize(newRef - segment.ray.origin);
+			segment.ray.direction = glm::normalize(
+				newView - cam.right * cam.pixelLength.x * (jittered_x - (float)cam.resolution.x * 0.5f)
+				- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
+			);
+		}
 
 		segment.ray.direction_inv = 1.0f / segment.ray.direction;
 		segment.lastRealRay = segment.ray;
@@ -673,14 +726,8 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	dim3 numblocksPathSegmentTracing = (pixelcount_fullvol + blockSize1d - 1) / blockSize1d;
 
 	// gen ray
-	thrust::default_random_engine rng = makeSeededRandomEngine_FullVol(iter, iter, iter);
-	thrust::uniform_real_distribution<float> upixel(0.0, 1.0f);
-
-	float jitterX = upixel(rng);
-	float jitterY = upixel(rng);
-
 	generateRayFromCamera_FullVol << <blocksPerGrid2d, blockSize2d >> > (cam,
-		iter, traceDepth, jitterX, jitterY, dev_paths);
+		iter, traceDepth, dev_paths);
 
 	while (!iterationComplete) {
 		//std::cout << "depth: " << depth << std::endl;

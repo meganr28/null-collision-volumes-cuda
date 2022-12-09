@@ -229,7 +229,7 @@ void RenderImGui(int windowWidth, int windowHeight)
 	if (ImGui::CollapsingHeader("Camera Settings"))
 	{
 		ImGui::SliderFloat("FOV", &ui_fov, 1.0f, 179.0f);
-		ImGui::SliderFloat("Focal Distance", &ui_focal_distance, 1.0f, 200.0f);
+		ImGui::SliderFloat("Focal Distance", &ui_focal_distance, 1.0f, 100.0f);
 		ImGui::SliderFloat("Lens Radius", &ui_lens_radius, 0.01f, 2.0f);
 	}
 
