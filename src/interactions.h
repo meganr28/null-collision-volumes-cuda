@@ -551,35 +551,44 @@ glm::vec3 Sample_channel_direct(
         return glm::vec3(1.0f);
     }
 
+    glm::vec3 T_maj = glm::vec3(1.0f);
     int channel = 0;
     tMin = glm::max(tMin, 0.0f);
-    t = tMin - glm::log(1.0f - u01(rng)) / getMajorant(medium, gui_params)[channel];
-    bool sampleMedium = t < tMax;
-    t = glm::min(t, tMax);
 
-    glm::vec3 T_maj = glm::vec3(1.0f);
+    while (true) {
+        t = tMin - glm::log(1.0f - u01(rng)) / getMajorant(medium, gui_params)[channel];
+        bool sampleMedium = t < tMax;
+        t = glm::min(t, tMax);
 
-    if (sampleMedium) {
-        ray_t = t;
-        glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
+        if (sampleMedium) {
+            ray_t = t;
+            glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
 
-        T_maj = glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
-        glm::vec3 scattering, absorption, null;
-        getCoefficients(media_density, gui_params, medium, samplePoint, segment, scattering, absorption, null);
-        glm::vec3 majorant = getMajorant(medium, gui_params);
+            T_maj *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
+            glm::vec3 scattering, absorption, null;
+            getCoefficients(media_density, gui_params, medium, samplePoint, segment, scattering, absorption, null);
+            glm::vec3 majorant = getMajorant(medium, gui_params);
 
-        float pdf = T_maj[0] * majorant[channel];
-        if (pdf < EPSILON) {
-            return glm::vec3(0.0f);
+            float pdf = T_maj[0] * majorant[channel];
+            //if (pdf < EPSILON) {
+            //    return glm::vec3(0.0f);
+            //}
+            T_ray *= T_maj * null / pdf;
+            direct_light_rays[idx].r_l *= T_maj * majorant / pdf;
+            direct_light_rays[idx].r_u *= T_maj * null / pdf;
+
+            if (glm::length(T_ray) < 0.0001f) {
+                return glm::vec3(1.0f);
+            }
+
+            tMin = t;
+            T_maj = glm::vec3(1.0f);
         }
-        T_ray *= T_maj * null / pdf;
-        direct_light_rays[idx].r_l *= T_maj * majorant / pdf;
-        direct_light_rays[idx].r_u *= T_maj * null / pdf;
+        else {
+            T_maj *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
 
-        return T_maj;
-    }
-    else {
-        return glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
+            return T_maj;
+        }
     }
 }
 
@@ -695,22 +704,25 @@ glm::vec3 computeVisibility(
         }
 
         if (glm::length(T_ray) < EPSILON) {
+            //pathSegments[idx].accumulatedIrradiance += glm::vec3(0.1, 0, 0);
             return glm::vec3(0.0f);
         }
 
         // if the intersected object IS the light source we selected, we are done
         if (obj_ID == r.light_ID) {
             num_iters++;
-            if (T_ray.x > 0.99f && T_ray.x < 1.01f && T_ray.y > 0.99f && T_ray.y < 1.01f && T_ray.z > 0.99f && T_ray.z < 1.01f) {
-                //pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
-            }
+            //if (T_ray.x > 0.99f && T_ray.x < 1.01f && T_ray.y > 0.99f && T_ray.y < 1.01f && T_ray.z > 0.99f && T_ray.z < 1.01f) {
+            //    pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
+            //}
+            //if (T_ray.x < 0.5f && T_ray.y < 0.5f && T_ray.z < 0.5f) {
+            //    pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
+            //}
             return T_ray;
         }
 
         num_iters++;
         // We encountered a bounding box/entry/exit of a volume, so we must change our medium value, update the origin, and traverse again
-        glm::vec3 old_origin = r.ray.origin;
-        r.ray.origin = old_origin + (r.ray.direction * (t_min + 0.001f));
+        r.ray.origin = r.ray.origin + (r.ray.direction * (t_min + 0.001f));
 
         // TODO: generalize to support both homogeneous and heterogeneous volumes
         /*r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :

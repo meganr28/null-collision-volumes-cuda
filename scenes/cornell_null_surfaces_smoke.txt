@@ -4,7 +4,7 @@ R_COLOR        	10 10 10
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	100
+EMITTANCE   	20
 
 // Diffuse white
 MATERIAL 1
@@ -41,14 +41,14 @@ EMITTANCE   	0
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/bunny_cloud.vdb
-ABSORPTION 0.01
-SCATTERING 0.1
+../scenes/vdb/smoke.vdb
+ABSORPTION 0.02
+SCATTERING 0.01
 ASYM_G     0.001
 
 // Camera
 CAMERA
-RES         512 512
+RES         400 400 
 FOVY        19.5
 ITERATIONS  5000
 DEPTH       1
@@ -56,8 +56,8 @@ FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
 MEDIUM      -1
-EYE         0.0 20.5 75
-LOOKAT      0 20 0
+EYE         0.0 45.5 75
+LOOKAT      0 45 0
 UP          0 1 0
 
 
@@ -66,60 +66,60 @@ OBJECT 0
 squareplane
 material 0
 mediuminterface -1 -1
-TRANS       0 60.9 0
+TRANS       0 105.9 0
 ROTAT       90 0 0
-SCALE       6 6 1
+SCALE       15 15 1
 
 // Floor
 OBJECT 1
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 -5 0
+TRANS       0 -15 0
 ROTAT       270 0 0
-SCALE       60 60 60
+SCALE       80 80 80
 
 // Ceiling
 OBJECT 2
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 61 0
+TRANS       0 107 0
 ROTAT       90 0 0
-SCALE       60 60 60
+SCALE       80 80 80
 
 // Back wall
 OBJECT 3
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 25 -30
+TRANS       0 25 -35
 ROTAT       0 0 0
-SCALE       60 72 60
+SCALE       80 150 80
 
 // Left wall
 OBJECT 4
 squareplane
 material 2
 mediuminterface -1 -1
-TRANS       -26 25 0
+TRANS       -35 25 0
 ROTAT       0 90 0
-SCALE       60 72 60
+SCALE       80 150 80
 
 // Right wall
 OBJECT 5
 squareplane
 material 3
 mediuminterface -1 -1
-TRANS       26 25 0
+TRANS       35 25 0
 ROTAT       0 270 0
-SCALE       60 72 60
+SCALE       80 150 80
 
 // front wall
 OBJECT 6
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 25 30
+TRANS       0 25 35
 ROTAT       180 0 0
-SCALE       60 72 60
+SCALE       80 150 80

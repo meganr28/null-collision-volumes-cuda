@@ -531,7 +531,7 @@ __global__ void sampleParticipatingMedium_FullVol(
 			if (!pathSegments[idx].prev_hit_was_specular) {
 
 				glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris, tris_size,
-					media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
+					media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
 
 				pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
