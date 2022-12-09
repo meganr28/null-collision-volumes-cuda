@@ -77,4 +77,6 @@ public:
     std::vector<BVHNode_GPU> bvh_nodes_gpu;
     std::vector<TriBounds> tri_bounds;
     RenderState state;
+
+    int environment_map_ID;
 };

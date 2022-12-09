@@ -272,6 +272,10 @@ void runCuda() {
 		float xscaled = (yscaled * scene->state.camera.resolution.x) / scene->state.camera.resolution.y;
 		float fovx = (atan(xscaled) * 180) / PI;
 		scene->state.camera.fov = glm::vec2(fovx, ui_fov);
+
+		scene->state.camera.pixelLength = glm::vec2(2 * xscaled / (float)scene->state.camera.resolution.x,
+			2 * yscaled / (float)scene->state.camera.resolution.y);
+
 		scene->state.camera.focal_distance = ui_focal_distance;
 		scene->state.camera.lens_radius = ui_lens_radius;
 
