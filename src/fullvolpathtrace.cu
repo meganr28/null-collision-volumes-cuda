@@ -396,18 +396,6 @@ __global__ void sampleParticipatingMedium_FullVol(
 			return;
 		}
 
-		//if (glm::isnan(pathSegments[idx].accumulatedIrradiance.x) || glm::isnan(pathSegments[idx].accumulatedIrradiance.y) || glm::isnan(pathSegments[idx].accumulatedIrradiance.z)) {
-		//	pathSegments[idx].accumulatedIrradiance = glm::vec3(100000.0, 0.0, 0.0);
-		//	pathSegments[idx].rayThroughput = glm::vec3(10.0, 0.0, 0.0);
-		//	pathSegments[idx].remainingBounces = 0;
-		//	return;
-		//}
-
-		//// Ray from last real collision
-		//if (pathSegments[idx].prev_event_was_real) {
-		//	pathSegments[idx].lastRealRay = pathSegments[idx].ray;
-		//}
-
 		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 
@@ -553,104 +541,9 @@ __global__ void handleSurfaceInteraction_FullVol(
 		}
 
 		glm::vec3 wi = glm::vec3(0.0f);
-		glm::vec3 f = glm::vec3(0.0f);
 		float pdf = 0.0f;
 		float absDot = 0.0f;
-
-		// Physically based BSDF sampling influenced by PBRT
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
-
-		if (material.type == SPEC_BRDF) {
-			wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = material.R;
-			}
-			else {
-				f = material.R / absDot;
-			}
-		}
-		else if (material.type == SPEC_BTDF) {
-			// spec refl
-			float eta = material.ior;
-			if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0001f) {
-				// outside
-				eta = 1.0f / eta;
-				wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-			}
-			else {
-				// inside
-				wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (glm::length(wi) <= 0.0001f) {
-				// total internal reflection
-				f = glm::vec3(0.0f);
-			}
-			else if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = material.T;
-			}
-			else {
-				f = material.T / absDot;
-			}
-		}
-		else if (material.type == SPEC_GLASS) {
-			// spec glass
-			float eta = material.ior;
-			if (u01(rng) < 0.5f) {
-				// spec refl
-				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (absDot == 0.0f) {
-					f = material.R;
-				}
-				else {
-					f = material.R / absDot;
-				}
-				f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), material.ior);
-			}
-			else {
-				// spec refr
-				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
-					// outside
-					eta = 1.0f / eta;
-					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-				}
-				else {
-					// inside
-					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-				}
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (glm::length(wi) <= 0.0001f) {
-					// total internal reflection
-					f = glm::vec3(0.0f);
-				}
-				if (absDot == 0.0f) {
-					f = material.T;
-				}
-				else {
-					f = material.T / absDot;
-				}
-				f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), material.ior);
-			}
-			f *= 2.0f;
-		}
-		else {
-			// diffuse
-			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
-			if (material.type == DIFFUSE_BTDF) {
-				wi = -wi;
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = absDot * 0.31831f;
-			f = material.R * 0.31831f;
-		}
-
+		glm::vec3 f = Sample_f(material, pathSegments[idx], intersection, &wi, &pdf, absDot, rng, u01);
 		pathSegments[idx].rayThroughput *= f * absDot / pdf;
 
 
