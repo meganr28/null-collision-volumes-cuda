@@ -1,6 +1,6 @@
 // Emissive material (light)
 MATERIAL 		0
-R_COLOR        	10 10 10
+R_COLOR        	1 1 1
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
@@ -41,7 +41,7 @@ EMITTANCE   	0
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/bunny_cloud.vdb
+../scenes/vdb/smoke2.vdb
 ABSORPTION 0.01
 SCATTERING 0.1
 ASYM_G     0.001
@@ -68,7 +68,7 @@ material 0
 mediuminterface -1 -1
 TRANS       0 60.9 0
 ROTAT       90 0 0
-SCALE       6 6 1
+SCALE       30 30 1
 
 // Floor
 OBJECT 1

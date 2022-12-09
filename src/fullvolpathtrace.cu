@@ -400,12 +400,14 @@ __global__ void sampleParticipatingMedium_FullVol(
 			return;
 		}
 
-		if (glm::isnan(pathSegments[idx].accumulatedIrradiance.x) || glm::isnan(pathSegments[idx].accumulatedIrradiance.y) || glm::isnan(pathSegments[idx].accumulatedIrradiance.z)) {
-			pathSegments[idx].accumulatedIrradiance = glm::vec3(100000.0, 0.0, 0.0);
-			pathSegments[idx].rayThroughput = glm::vec3(10.0, 0.0, 0.0);
-			pathSegments[idx].remainingBounces = 0;
-			return;
-		}
+		//pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+
+		//if (glm::isnan(pathSegments[idx].accumulatedIrradiance.x) || glm::isnan(pathSegments[idx].accumulatedIrradiance.y) || glm::isnan(pathSegments[idx].accumulatedIrradiance.z)) {
+		//	pathSegments[idx].accumulatedIrradiance = glm::vec3(100000.0, 0.0, 0.0);
+		//	pathSegments[idx].rayThroughput = glm::vec3(10.0, 0.0, 0.0);
+		//	pathSegments[idx].remainingBounces = 0;
+		//	return;
+		//}
 
 		/*if (depth == max_depth - 3 && pathSegments[idx].remainingBounces > 0) {
 			pathSegments[idx].accumulatedIrradiance += glm::vec3(0, 0, 1);
@@ -424,28 +426,31 @@ __global__ void sampleParticipatingMedium_FullVol(
 		MediumInteraction mi;
 		mi.medium = -1;
 		glm::vec3 T_maj;
+		bool scattered = false;
 		if (rayMediumIndex >= 0) {
 			if (media[rayMediumIndex].type == HOMOGENEOUS) {
 				pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
 				//pathSegments[idx].rayThroughput *= Sample_heterogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, rng, u01);
-				T_maj = Sample_channel(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, media_density, rayMediumIndex, gui_params, rng, u01);
+				T_maj = Sample_channel(idx, rayMediumIndex, max_depth, media, media_size, pathSegments, materials, intersections[idx], &mi, geoms, geoms_size, tris, tris_size,
+					direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, media_density, gui_params, rng, u01, scattered);
 				//if (glm::length(T_maj) < 0.f) pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
 			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {
 			pathSegments[idx].remainingBounces = 0;
+			return;
 		}
 		intersections[idx].mi = mi;
 
 		// Handle medium interaction
-		bool scattered = false;
+		/*bool scattered = false;
 		if (mi.medium >= 0) {
 			//pathSegments[idx].rayThroughput *= handleMediumInteraction(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], mi, media_density, rayMediumIndex, rng, u01);
 			scattered = handleMediumInteraction(idx, max_depth, T_maj, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
 				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
-		}
+		}*/
 
 		if (pathSegments[idx].remainingBounces <= 0) {
 			return;
@@ -454,7 +459,6 @@ __global__ void sampleParticipatingMedium_FullVol(
 		if (scattered) {
 			return;
 		}
-
 
 		if (rayMediumIndex >= 0) {
 			pathSegments[idx].rayThroughput *= T_maj / T_maj[0];

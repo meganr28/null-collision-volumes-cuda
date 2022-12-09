@@ -221,8 +221,8 @@ void RenderImGui(int windowWidth, int windowHeight)
 		static int item_current_2 = 0;
 		ImGui::Combo("Integrator", (int*)&ui_integrator, "Null-Scattering MIS\0Delta Tracking NEE\0Surface MIS\0\0");
 
-		ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 256);
-		ImGui::SliderInt("Extra Depth Padding", &ui_depth_padding, 0, 512);
+		ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 16);
+		ImGui::SliderInt("Extra Depth Padding", &ui_depth_padding, 0, 16);
 		ImGui::SliderInt("Refresh Rate (2^ iters)", &ui_refresh_bit, 0, 7);
 	}
 
@@ -239,8 +239,8 @@ void RenderImGui(int windowWidth, int windowHeight)
 		float* flfssl[3] = { &ui_sigma_s.x, &ui_sigma_s.y, &ui_sigma_s.z };
 		//ImGui::SliderFloat("Absorption", &ui_sigma_a, 0.00001f, 1.0f);
 		//ImGui::SliderFloat("Scattering", &ui_sigma_s, 0.00001f, 1.0f);
-		ImGui::SliderFloat3("Absorption", *flfl, 0.00001f, 1.00f, "%.4f");
-		ImGui::SliderFloat3("Scattering", *flfssl, 0.00001f, 1.00f, "%.4f");
+		ImGui::SliderFloat3("Absorption", *flfl, 0.00001f, 50.00f, "%.4f");
+		ImGui::SliderFloat3("Scattering", *flfssl, 0.00001f, 50.00f, "%.4f");
 		ImGui::SliderFloat("P Asymmetry", &ui_g, -1.0f, 1.0f);
 	}
 

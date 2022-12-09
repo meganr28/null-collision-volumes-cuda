@@ -26,8 +26,8 @@ IntegratorType previous_integrator = DEFAULT_INTEGRATOR;
 // Path Tracing Parameters
 int ui_max_ray_depth = 8;
 int last_max_ray_depth = 8;
-int ui_depth_padding = 16;
-int last_depth_padding = 16;
+int ui_depth_padding = 2;
+int last_depth_padding = 2;
 int ui_refresh_bit = 0;
 int last_refresh_bit = 0;
 int refresh_rate = 1;
