@@ -166,6 +166,109 @@ float Sample_p(const glm::vec3& wo, glm::vec3* wi, float* pdf, const glm::vec2& 
     return p;
 }
 
+//glm::vec3 Sample_f(
+//    const Material& mat, 
+//    const PathSegment& segment, 
+//    const ShadeableIntersection& intersection, 
+//    const glm::vec3& wo, 
+//    glm::vec3* wi, 
+//    float* pdf, 
+//    const glm::vec2& u,
+//    thrust::default_random_engine& rng,
+//    thrust::uniform_real_distribution<float>& u01)
+//{
+//    // Physically based BSDF sampling influenced by PBRT
+//    // https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
+//    // https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
+//
+//    float absDot = glm::abs(glm::dot(intersection.surfaceNormal, *wi));
+//
+//    if (mat.type == SPEC_BRDF) {
+//        *wi = glm::reflect(segment.ray.direction, intersection.surfaceNormal);
+//        *pdf = 1.0f;
+//        if (absDot >= -0.0001f && absDot <= -0.0001f) {
+//            return mat.R;
+//        }
+//        else {
+//            return mat.R / absDot;
+//        }
+//    }
+//    else if (mat.type == SPEC_BTDF) {
+//        // spec refl
+//        float eta = mat.ior;
+//        if (glm::dot(intersection.surfaceNormal, segment.ray.direction) < 0.0001f) {
+//            // outside
+//            eta = 1.0f / eta;
+//            *wi = glm::refract(segment.ray.direction, intersection.surfaceNormal, eta);
+//        }
+//        else {
+//            // inside
+//            *wi = glm::refract(segment.ray.direction, -intersection.surfaceNormal, eta);
+//        }
+//        *pdf = 1.0f;
+//        if (glm::length(*wi) <= 0.0001f) {
+//            // total internal reflection
+//            return glm::vec3(0.0f);
+//        }
+//        else if (absDot >= -0.0001f && absDot <= -0.0001f) {
+//            return mat.T;
+//        }
+//        else {
+//            return mat.T / absDot;
+//        }
+//    }
+//    else if (mat.type == SPEC_GLASS) {
+//        // spec glass
+//        float eta = mat.ior;
+//        if (u01(rng) < 0.5f) {
+//            // spec refl
+//            wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
+//            pdf = 1.0f;
+//            if (absDot == 0.0f) {
+//                f = material.R;
+//            }
+//            else {
+//                f = material.R / absDot;
+//            }
+//            f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), material.ior);
+//        }
+//        else {
+//            // spec refr
+//            if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
+//                // outside
+//                eta = 1.0f / eta;
+//                wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
+//            }
+//            else {
+//                // inside
+//                wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
+//            }
+//            pdf = 1.0f;
+//            if (glm::length(wi) <= 0.0001f) {
+//                // total internal reflection
+//                f = glm::vec3(0.0f);
+//            }
+//            if (absDot == 0.0f) {
+//                f = material.T;
+//            }
+//            else {
+//                f = material.T / absDot;
+//            }
+//            f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), material.ior);
+//        }
+//        f *= 2.0f;
+//    }
+//    else {
+//        // diffuse
+//        *wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+//        if (mat.type == DIFFUSE_BTDF) {
+//            *wi = -*wi;
+//        }
+//        *pdf = absDot * 0.31831f;
+//        return mat.R * 0.31831f;
+//    }
+//}
+
 inline __host__ __device__ glm::vec3 getSigmaT(const Medium& medium, GuiParameters& gui_params) {
     return gui_params.sigma_a + gui_params.sigma_s;
 }
@@ -595,6 +698,9 @@ glm::vec3 Sample_channel_direct(
         }
         else {
             T_maj *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
+            if (glm::length(T_maj) < 0.0001f) {
+                return glm::vec3(1.0f);
+            }
 
             return T_maj;
         }
@@ -609,7 +715,6 @@ glm::vec3 computeVisibility(
     Geom* geoms,
     int geoms_size,
     Tri* tris,
-    int tris_size,
     Medium* media,
     int media_size,
     const nanovdb::NanoGrid<float>* media_density,
@@ -618,7 +723,6 @@ glm::vec3 computeVisibility(
     Light* lights,
     int num_lights,
     LBVHNode* lbvh,
-    BVHNode_GPU* bvh_nodes,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
@@ -751,7 +855,6 @@ glm::vec3 directLightSample(
     Geom* geoms,
     int geoms_size,
     Tri* tris,
-    int tris_size,
     Medium* media,
     int media_size,
     const nanovdb::NanoGrid<float>* media_density,
@@ -760,7 +863,6 @@ glm::vec3 directLightSample(
     Light* lights,
     int num_lights,
     LBVHNode* lbvh,
-    BVHNode_GPU* bvh_nodes,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01) 
@@ -833,11 +935,9 @@ glm::vec3 directLightSample(
         }
     }
 
-    
-
     // compute visibility
-    glm::vec3 T_ray = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, tris_size, media, media_size, media_density,
-        direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
+    glm::vec3 T_ray = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, media, media_size, media_density,
+        direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
  
     direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L / (float)num_lights;
     direct_light_rays[idx].r_u *= pathSegments[idx].r_u * pdf_B;
@@ -877,13 +977,11 @@ glm::vec3 Sample_channel(
     Geom* geoms,
     int geoms_size,
     Tri* tris,
-    int tris_size,
     MISLightRay* direct_light_rays,
     MISLightIntersection* direct_light_isects,
     Light* lights,
     int num_lights,
     LBVHNode* lbvh,
-    BVHNode_GPU* bvh_nodes,
     const nanovdb::NanoGrid<float>* media_density,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
@@ -1008,8 +1106,8 @@ glm::vec3 Sample_channel(
                 bool sampleLight = (glm::length(pathSegments[path_index].rayThroughput) > EPSILON && glm::length(pathSegments[path_index].r_u) > EPSILON);
                 if (sampleLight) {
                     // Direct light sampling
-                    glm::vec3 Ld = directLightSample(path_index, true, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
-                        media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
+                    glm::vec3 Ld = directLightSample(path_index, true, pathSegments, materials, isect, geoms, geoms_size, tris,
+                        media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
 
                     pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * Ld;
 
@@ -1046,6 +1144,10 @@ glm::vec3 Sample_channel(
             mi->medium = -1;
             isect.mi = *mi;
             T_maj *= glm::exp(-getMajorant(media[mediumIndex], gui_params) * (t - tMin));
+            if (glm::length(T_maj) < 0.0001f) {
+                return glm::vec3(1.0f);
+            }
+
             return T_maj;
         }
     }
@@ -1063,7 +1165,6 @@ bool handleMediumInteraction(
     Geom* geoms,
     int geoms_size,
     Tri* tris,
-    int tris_size,
     Medium* media,
     int media_size,
     const nanovdb::NanoGrid<float>* media_density,
@@ -1072,7 +1173,6 @@ bool handleMediumInteraction(
     Light* lights,
     int num_lights,
     LBVHNode* lbvh,
-    BVHNode_GPU* bvh_nodes,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
@@ -1146,8 +1246,8 @@ bool handleMediumInteraction(
         bool sampleLight = (glm::length(pathSegments[idx].rayThroughput) > EPSILON || glm::length(pathSegments[idx].r_u) > EPSILON);
         if (sampleLight) {
             // Direct light sampling
-            glm::vec3 Ld = directLightSample(idx, true, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
-                media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
+            glm::vec3 Ld = directLightSample(idx, true, pathSegments, materials, isect, geoms, geoms_size, tris,
+                media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
 
             pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 

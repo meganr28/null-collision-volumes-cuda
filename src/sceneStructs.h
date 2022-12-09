@@ -265,9 +265,20 @@ struct ShadeableIntersection {
 
 };
 
+struct SceneInfo {
+    int geoms_size;
+    int media_size;
+    int lights_size;
+    int pixel_count;
+};
+
 struct GuiParameters {
     glm::vec3 sigma_a;
     glm::vec3 sigma_s;
     float g;
+    int max_depth;
+    int depth_padding;
+    int refresh_rate;
+    int refresh_bit;
 };
 
