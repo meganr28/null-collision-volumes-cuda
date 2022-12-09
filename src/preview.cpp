@@ -214,12 +214,9 @@ void RenderImGui(int windowWidth, int windowHeight)
 	}
 	if (ImGui::CollapsingHeader("Rendering Settings"))
 	{
-		static ImGuiComboFlags combo_flags = 0;
-		const char* items[] = { "Null-Scattering MIS", "Delta Tracking NEE", "Surface Only MIS" };
-		static int item_current_idx = 0; // Here we store our selection data as an index.
-		const char* combo_preview_value = items[item_current_idx];  // Pass in the preview value visible before opening the combo (it could be anything)
-		static int item_current_2 = 0;
 		ImGui::Combo("Integrator", (int*)&ui_integrator, "Null-Scattering MIS\0Delta Tracking NEE\0Surface MIS\0\0");
+
+		ImGui::Combo("Importance Sampling", (int*)&ui_importance_sampling, "Uni + NEE MIS\0NEE\0UNI\0\0");
 
 		ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 16);
 		ImGui::SliderInt("Extra Depth Padding", &ui_depth_padding, 0, 16);

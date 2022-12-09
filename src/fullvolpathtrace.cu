@@ -513,8 +513,14 @@ __global__ void sampleParticipatingMedium_FullVol(
 						float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
 						float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
 						pdf_L *= (1.0f / (float)num_lights);
-						pathSegments[idx].r_l *= pdf_L;
-						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+						if (gui_params.importance_sampling == UNI) {
+							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
+						}
+						else if (gui_params.importance_sampling == NEE) {
+							pathSegments[idx].r_l *= pdf_L;
+							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+						}
+						
 					}
 				}
 				pathSegments[idx].remainingBounces = 0;
@@ -531,15 +537,17 @@ __global__ void sampleParticipatingMedium_FullVol(
 		if (intersections[idx].mi.medium == -1) {
 
 
-			
-			if (!pathSegments[idx].prev_hit_was_specular) {
+			if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
+				if (!pathSegments[idx].prev_hit_was_specular) {
 
-				glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris, tris_size,
-					media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
+					glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris, tris_size,
+						media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
 
-				pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
+					pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
+				}
 			}
+
 
 			glm::vec3 wi = glm::vec3(0.0f);
 			glm::vec3 f = glm::vec3(0.0f);

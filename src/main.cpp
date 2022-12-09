@@ -8,6 +8,7 @@
 #include <glm/gtx/string_cast.hpp>
 
 #define DEFAULT_INTEGRATOR NULL_SCATTERING_MIS
+#define DEFAULT_IMPORTANCE_SAMPLING UNI_NEE_MIS
 
 static std::string startTimeString;
 
@@ -22,6 +23,9 @@ static double lastY;
 IntegratorType ui_integrator = DEFAULT_INTEGRATOR;
 IntegratorType last_integrator = DEFAULT_INTEGRATOR;
 IntegratorType previous_integrator = DEFAULT_INTEGRATOR;
+
+ImportanceSampling ui_importance_sampling = DEFAULT_IMPORTANCE_SAMPLING;
+ImportanceSampling last_importance_sampling = DEFAULT_IMPORTANCE_SAMPLING;
 
 // Path Tracing Parameters
 int ui_max_ray_depth = 8;
@@ -181,6 +185,11 @@ void saveImage() {
 
 void runCuda() {
 
+	if (last_importance_sampling != ui_importance_sampling) {
+		last_importance_sampling = ui_importance_sampling;
+		camchanged = true;
+
+	}
 
 	if (last_max_ray_depth != ui_max_ray_depth) {
 		last_max_ray_depth = ui_max_ray_depth;
@@ -198,6 +207,8 @@ void runCuda() {
 		refresh_rate = 1 << ui_refresh_bit;
 		camchanged = true;
 	}
+
+
 
 	if (last_fov != ui_fov) {
 		last_fov = ui_fov;
@@ -306,7 +317,7 @@ void runCuda() {
 
 	
 	//GuiParameters gui_params = { glm::vec3(ui_sigma_a), glm::vec3(ui_sigma_s), ui_g };
-	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), ui_g };
+	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), ui_g, ui_importance_sampling };
 	
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer

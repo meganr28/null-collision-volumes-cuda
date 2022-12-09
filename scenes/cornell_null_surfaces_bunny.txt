@@ -4,7 +4,7 @@ R_COLOR        	10 10 10
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	10
+EMITTANCE   	2
 
 // Diffuse white
 MATERIAL 1
@@ -48,7 +48,7 @@ ASYM_G     0.001
 
 // Camera
 CAMERA
-RES         1024 1024
+RES         512 512
 FOVY        19.5
 ITERATIONS  5000
 DEPTH       1
@@ -68,7 +68,7 @@ material 0
 mediuminterface -1 -1
 TRANS       0 60.9 0
 ROTAT       90 0 0
-SCALE       6 6 1
+SCALE       30 30 1
 
 // Floor
 OBJECT 1

@@ -39,6 +39,7 @@ extern int width;
 extern int height;
 
 extern IntegratorType ui_integrator;
+extern ImportanceSampling ui_importance_sampling;
 
 extern int ui_max_ray_depth;
 extern int ui_depth_padding;

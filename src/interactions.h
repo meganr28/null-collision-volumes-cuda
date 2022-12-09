@@ -839,11 +839,15 @@ glm::vec3 directLightSample(
     glm::vec3 T_ray = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, tris_size, media, media_size, media_density,
         direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
  
-    direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L / (float)num_lights;
-    direct_light_rays[idx].r_u *= pathSegments[idx].r_u * pdf_B;
-    
-    direct_light_isects[idx].LTE *= T_ray / (direct_light_rays[idx].r_l + direct_light_rays[idx].r_u);
-    //direct_light_isects[idx].LTE *= T_ray * (float)num_lights / pdf_L;
+    if (gui_params.importance_sampling == NEE) {
+        direct_light_isects[idx].LTE *= T_ray * (float)num_lights / pdf_L;
+    }
+    else if (gui_params.importance_sampling == UNI_NEE_MIS) {
+        direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L / (float)num_lights;
+        direct_light_rays[idx].r_u *= pathSegments[idx].r_u * pdf_B;
+
+        direct_light_isects[idx].LTE *= T_ray / (direct_light_rays[idx].r_l + direct_light_rays[idx].r_u);
+    }
     return direct_light_isects[idx].LTE;
 }
 
@@ -1007,11 +1011,14 @@ glm::vec3 Sample_channel(
 
                 bool sampleLight = (glm::length(pathSegments[path_index].rayThroughput) > EPSILON && glm::length(pathSegments[path_index].r_u) > EPSILON);
                 if (sampleLight) {
-                    // Direct light sampling
-                    glm::vec3 Ld = directLightSample(path_index, true, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
-                        media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
 
-                    pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * Ld;
+                    if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
+                        // Direct light sampling
+                        glm::vec3 Ld = directLightSample(path_index, true, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
+                            media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
+
+                        pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * Ld;
+                    }
 
                     // Sample phase function
                     glm::vec3 phase_wi;
@@ -1146,10 +1153,13 @@ bool handleMediumInteraction(
         bool sampleLight = (glm::length(pathSegments[idx].rayThroughput) > EPSILON || glm::length(pathSegments[idx].r_u) > EPSILON);
         if (sampleLight) {
             // Direct light sampling
-            glm::vec3 Ld = directLightSample(idx, true, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
-                media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
+            if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
+                glm::vec3 Ld = directLightSample(idx, true, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
+                    media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
 
-            pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
+                pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
+
+            }
 
             // Sample phase function
             glm::vec3 phase_wi;
