@@ -52,6 +52,8 @@ extern float ui_lens_radius;
 extern glm::vec3 ui_sigma_a;
 extern glm::vec3 ui_sigma_s;
 extern float ui_g;
+extern float ui_density_offset;
+extern float ui_density_scale;
 
 void runCuda();
 void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods);

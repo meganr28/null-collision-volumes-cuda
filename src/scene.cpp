@@ -362,11 +362,6 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
                 auto boundingBox = grid->worldBBox();
                 auto min_index = grid->worldToIndex(boundingBox.min());
                 auto max_index = grid->worldToIndex(boundingBox.max());
-                std::cout << "Min index using transform:  " << min_index[0] << " " << min_index[1] << " " << min_index[2] << std::endl;
-                std::cout << "Max index using transform:  " << max_index[0] << " " << max_index[1] << " " << max_index[2] << std::endl;
-
-                
-
 
                 auto gridDim = boundingBox.dim();
                 nanovdb::Vec3R aabb_min = boundingBox.min();
@@ -420,12 +415,6 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
                 glm::vec4 aabb_max_v4 = glm::vec4(aabb_max[0], aabb_max[1], aabb_max[2], 1.0);
                 glm::vec3 transformed_aabb_min = glm::vec3(newMedium.worldToMedium * aabb_min_v4);
                 glm::vec3 transformed_aabb_max = glm::vec3(newMedium.worldToMedium * aabb_max_v4);
-
-                /*std::cout << "Transformed Min Before: " << glm::to_string(aabb_min_v4) << std::endl;
-                std::cout << "Transformed Min After: " << glm::to_string(transformed_aabb_min) << std::endl;
-
-                std::cout << "Transformed Max Before: " << glm::to_string(aabb_max_v4) << std::endl;
-                std::cout << "Transformed Max After: " << glm::to_string(transformed_aabb_max) << std::endl;*/
 
                 file.close();
             }

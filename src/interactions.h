@@ -499,7 +499,7 @@ glm::vec3 computeDirectLightSamplePreVis(
 inline __host__ __device__
 glm::vec3 getMajorant(const Medium& medium, GuiParameters& gui_params)
 {
-    return medium.maxDensity * (gui_params.sigma_a + gui_params.sigma_s);
+    return ((medium.maxDensity + gui_params.density_offset) * gui_params.density_scale) * (gui_params.sigma_a + gui_params.sigma_s);
 }
 
 inline __host__ __device__
@@ -515,6 +515,7 @@ void getCoefficients(
 {
     glm::vec3 localSamplePoint = glm::vec3(medium.worldToMedium * glm::vec4(samplePoint, 1.0));
     float density = Density_heterogeneous(medium, media_density, localSamplePoint, segment);
+    density = (density + gui_params.density_offset) * gui_params.density_scale;
     //if (density <= 0.0001f) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
     scattering = density * glm::vec3(gui_params.sigma_s);
     absorption = density * glm::vec3(gui_params.sigma_a);

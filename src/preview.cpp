@@ -238,7 +238,9 @@ void RenderImGui(int windowWidth, int windowHeight)
 		//ImGui::SliderFloat("Scattering", &ui_sigma_s, 0.00001f, 1.0f);
 		ImGui::SliderFloat3("Absorption", *flfl, 0.00001f, 10.00f, "%.4f");
 		ImGui::SliderFloat3("Scattering", *flfssl, 0.00001f, 10.00f, "%.4f");
-		ImGui::SliderFloat("P Asymmetry", &ui_g, -1.0f, 1.0f);
+		ImGui::SliderFloat("Asymmetry", &ui_g, -1.0f, 1.0f);
+		ImGui::SliderFloat("Density Offset", &ui_density_offset, 0.0f, 2.5f);
+		ImGui::SliderFloat("Density Scale", &ui_density_scale, 0.1f, 25.0f);
 	}
 
 

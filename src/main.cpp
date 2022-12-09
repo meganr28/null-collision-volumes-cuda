@@ -51,6 +51,10 @@ glm::vec3 ui_sigma_s = glm::vec3(0.15f);
 glm::vec3 last_sigma_s = glm::vec3(0.15f);
 float ui_g= 0.15f;
 float last_g = 0.15f;
+float ui_density_offset = 0.0f;
+float last_density_offset = 0.0f;
+float ui_density_scale = 1.0f;
+float last_density_scale = 1.0f;
 
 
 static bool camchanged = true;
@@ -238,6 +242,16 @@ void runCuda() {
 		camchanged = true;
 	}
 
+	if (last_density_offset != ui_density_offset) {
+		last_density_offset = ui_density_offset;
+		camchanged = true;
+	}
+
+	if (last_density_scale != ui_density_scale) {
+		last_density_scale = ui_density_scale;
+		camchanged = true;
+	}
+
 	if (last_integrator != ui_integrator) {
 		previous_integrator = last_integrator;
 		last_integrator = ui_integrator;
@@ -321,7 +335,12 @@ void runCuda() {
 
 	
 	//GuiParameters gui_params = { glm::vec3(ui_sigma_a), glm::vec3(ui_sigma_s), ui_g };
-	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), ui_g, ui_importance_sampling };
+	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), 
+		glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), 
+		ui_g, 
+		ui_density_offset,
+		ui_density_scale,
+		ui_importance_sampling };
 	
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
