@@ -178,6 +178,35 @@ void volPathtraceFree() {
 	cudaFree(dev_bsdf_light_isects);
 }
 
+/**
+* Concentric Disk Sampling from PBRT Chapter 13.6.2
+*/
+__host__ __device__ glm::vec3 concentricSampleDisk_Vol(glm::vec2& sample)
+{
+	// Map sample point (uniform random numbers) to range [-1, 1]
+	glm::vec2 mappedSample = 2.f * sample - glm::vec2(1.f, 1.f);
+
+	// Handle origin to avoid divide by zero
+	if (mappedSample.x == 0.f && mappedSample.y == 0.f) {
+		return glm::vec3(0.f);
+	}
+
+	// Apply concentric mapping to the adjusted sample point
+	float r = 0.f;
+	float theta = 0.f;
+	// Find r and theta depending on x and y coords of mapped point
+	if (std::abs(mappedSample.x) > std::abs(mappedSample.y)) {
+		r = mappedSample.x;
+		theta = (PI / 4.0f) * (mappedSample.y / mappedSample.x);
+	}
+	else {
+		r = mappedSample.y;
+		theta = (PI / 2.0f) - (PI / 4.0f) * (mappedSample.x / mappedSample.y);
+	}
+
+	return glm::vec3(r * glm::cos(theta), r * glm::sin(theta), 0.0f);
+}
+
 __global__ void generateRayFromThinLensCamera_Vol(Camera cam, int iter, int traceDepth, float jitterX, float jitterY, glm::vec3 thinLensCamOrigin, glm::vec3 newRef,
 	PathSegment* pathSegments)
 {
@@ -215,7 +244,7 @@ __global__ void generateRayFromThinLensCamera_Vol(Camera cam, int iter, int trac
 	}
 }
 
-__global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth, float jitterX, float jitterY,
+__global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth,
 	PathSegment* pathSegments)
 {
 	__shared__ PathSegment mat[BLOCK_SIZE_2D][BLOCK_SIZE_2D];
@@ -224,6 +253,8 @@ __global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth, 
 	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 	int index = x + (y * cam.resolution.x);
 
+	thrust::uniform_real_distribution<float> upixel(0.0, 1.0f);
+
 	if (x < cam.resolution.x && y < cam.resolution.y) {
 		mat[threadIdx.x][threadIdx.y] = pathSegments[index];
 		PathSegment& segment = mat[threadIdx.x][threadIdx.y];
@@ -231,23 +262,50 @@ __global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth, 
 		segment.ray.origin = cam.position;
 		segment.rng_engine = makeSeededRandomEngine_Vol(iter, index, traceDepth);
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.r_u = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.r_l = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
+		segment.prev_event_was_real = true;
 		segment.medium = cam.medium;
+
+		float jitterX = upixel(segment.rng_engine);
+		float jitterY = upixel(segment.rng_engine);
 
 		float jittered_x = ((float)x) + jitterX;
 		float jittered_y = ((float)y) + jitterY;
 
-		// TODO: implement antialiasing by jittering the ray
+		// Add antialiasing by jittering the ray
 		segment.ray.direction = glm::normalize(
 			cam.view - cam.right * cam.pixelLength.x * (jittered_x - (float)cam.resolution.x * 0.5f)
 			- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
 		);
 
+		// Add depth of field
+		if (cam.lens_radius > 0.0f) {
+			// Get sample on lens
+			glm::vec2 thinLensSample = glm::vec2(upixel(segment.rng_engine), upixel(segment.rng_engine));
+			glm::vec3 lensPoint = cam.lens_radius * concentricSampleDisk_Vol(thinLensSample);
+
+			// Get focal point
+			float focalT = (cam.focal_distance / glm::length(cam.lookAt - cam.position));
+			glm::vec3 newRef = segment.ray.origin + focalT * (cam.lookAt - cam.position);
+
+			// Update ray
+			segment.ray.origin += lensPoint;
+			glm::vec3 newView = glm::normalize(newRef - segment.ray.origin);
+			segment.ray.direction = glm::normalize(
+				newView - cam.right * cam.pixelLength.x * (jittered_x - (float)cam.resolution.x * 0.5f)
+				- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
+			);
+		}
+
 		segment.ray.direction_inv = 1.0f / segment.ray.direction;
+		segment.lastRealRay = segment.ray;
 
 		segment.remainingBounces = traceDepth;
+		segment.realPathLength = 0;
 
 		pathSegments[index] = mat[threadIdx.x][threadIdx.y];
 	}
@@ -768,106 +826,9 @@ __global__ void surfaceSpawnPathSegment(
 			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
 		}
 		glm::vec3 wi = glm::vec3(0.0f);
-		glm::vec3 f = glm::vec3(0.0f);
 		float pdf = 0.0f;
 		float absDot = 0.0f;
-
-		//thrust::uniform_real_distribution<float> u01(0, 1);
-
-		// Physically based BSDF sampling influenced by PBRT
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
-
-		if (m.type == SPEC_BRDF) {
-			wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = m.R;
-			}
-			else {
-				f = m.R / absDot;
-			}
-		}
-		else if (m.type == SPEC_BTDF) {
-			// spec refl
-			float eta = m.ior;
-			if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0001f) {
-				// outside
-				eta = 1.0f / eta;
-				wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-			}
-			else {
-				// inside
-				wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (glm::length(wi) <= 0.0001f) {
-				// total internal reflection
-				f = glm::vec3(0.0f);
-			}
-			else if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = m.T;
-			}
-			else {
-				f = m.T / absDot;
-			}
-		}
-		else if (m.type == SPEC_GLASS) {
-			// spec glass
-			float eta = m.ior;
-			if (u01(rng) < 0.5f) {
-				// spec refl
-				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (absDot == 0.0f) {
-					f = m.R;
-				}
-				else {
-					f = m.R / absDot;
-				}
-				f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
-			}
-			else {
-				// spec refr
-				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
-					// outside
-					eta = 1.0f / eta;
-					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-				}
-				else {
-					// inside
-					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-				}
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (glm::length(wi) <= 0.0001f) {
-					// total internal reflection
-					f = glm::vec3(0.0f);
-				}
-				if (absDot == 0.0f) {
-					f = m.T;
-				}
-				else {
-					f = m.T / absDot;
-				}
-				f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
-			}
-			f *= 2.0f;
-		}
-		else {
-			// diffuse
-			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
-			if (m.type == DIFFUSE_BTDF) {
-				wi = -wi;
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = absDot * 0.31831f;
-			f = m.R * 0.31831f;
-		}
-
+		glm::vec3 f = Sample_f(m, pathSegments[idx], intersection, &wi, &pdf, absDot, rng, u01);
 		pathSegments[idx].rayThroughput *= f * absDot / pdf;
 
 		// Change ray direction
@@ -992,14 +953,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 	dim3 numblocksPathSegmentTracing = (pixelcount_vol + blockSize1d - 1) / blockSize1d;
 
 	// gen ray
-	thrust::default_random_engine rng = makeSeededRandomEngine_Vol(iter, iter, iter);
-	thrust::uniform_real_distribution<float> upixel(0.0, 1.0f);
-
-	float jitterX = upixel(rng);
-	float jitterY = upixel(rng);
-
 	generateRayFromCamera_Vol << <blocksPerGrid2d, blockSize2d >> > (cam,
-		iter, traceDepth, jitterX, jitterY, dev_paths);
+		iter, traceDepth, dev_paths);
 
 	while (!iterationComplete) {
 		//std::cout << "depth: " << depth << std::endl;

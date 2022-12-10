@@ -234,6 +234,7 @@ struct PathSegment {
     int remainingBounces;
     int realPathLength;
     int medium;
+    int rgbWavelength;
     bool prev_hit_was_specular;
     bool prev_hit_null_material;
     bool prev_event_was_real;
@@ -271,10 +272,21 @@ struct ShadeableIntersection {
 
 };
 
+struct SceneInfo {
+    int geoms_size;
+    int media_size;
+    int lights_size;
+    int pixel_count;
+};
+
 struct GuiParameters {
     glm::vec3 sigma_a;
     glm::vec3 sigma_s;
     float g;
+    int max_depth;
+    int depth_padding;
+    int refresh_rate;
+    int refresh_bit;
     float density_offset;
     float density_scale;
     ImportanceSampling importance_sampling;
