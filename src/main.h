@@ -39,6 +39,7 @@ extern int width;
 extern int height;
 
 extern IntegratorType ui_integrator;
+extern ImportanceSampling ui_importance_sampling;
 
 extern int ui_max_ray_depth;
 extern int ui_depth_padding;
@@ -51,6 +52,8 @@ extern float ui_lens_radius;
 extern glm::vec3 ui_sigma_a;
 extern glm::vec3 ui_sigma_s;
 extern float ui_g;
+extern float ui_density_offset;
+extern float ui_density_scale;
 
 void runCuda();
 void keyCallback(GLFWwindow *window, int key, int scancode, int action, int mods);

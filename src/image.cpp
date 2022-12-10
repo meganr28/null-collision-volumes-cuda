@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <stb_image_write.h>
+#include <stb_image.h>
 
 #include "image.h"
 
@@ -8,6 +9,44 @@ image::image(int x, int y) :
         xSize(x),
         ySize(y),
         pixels(new glm::vec3[x * y]) {
+}
+
+image::image(std::string file_name) {
+    std::cout << file_name << std::endl;
+    int n;
+    float* data = stbi_loadf(file_name.c_str(), &xSize, &ySize, &n, 0);
+    std::cout << xSize << " " << ySize << " " << n << std::endl;
+
+    for (int y = 0; y < ySize; y++) {
+        for (int x = 0; x < xSize; x++) {
+            int i = y * xSize + x;
+
+            //std::cout << data[3 * i + 0] << " " << data[3 * i + 1] << " " << data[3 * i + 2] << std::endl;;
+
+        }
+    }
+
+
+
+    pixels = new glm::vec3[xSize * ySize];
+
+    for (int y = 0; y < ySize; y++) {
+        for (int x = 0; x < xSize; x++) {
+            int i = y * xSize + x;
+            pixels[i] = glm::vec3(data[3 * i + 0], data[3 * i + 1], data[3 * i + 2]);
+        }
+    }
+
+    for (int y = 0; y < ySize; y++) {
+        for (int x = 0; x < xSize; x++) {
+            int i = y * xSize + x;
+            //pixels[i] = glm::vec3(data[3 * i + 0], data[3 * i + 1], data[3 * i + 2]);
+            //std::cout << pixels[i].x << " " << pixels[i].y << " " << pixels[i].z << std::endl;;
+        }
+    }
+
+
+    //memcpy(pixels, data, xSize * ySize * n);
 }
 
 image::~image() {

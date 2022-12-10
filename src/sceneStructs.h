@@ -18,6 +18,12 @@ enum IntegratorType {
     SURFACE_ONLY_MIS
 };
 
+enum ImportanceSampling {
+    UNI_NEE_MIS,
+    NEE,
+    UNI
+};
+
 enum MediumType {
     HOMOGENEOUS,
     HETEROGENEOUS,
@@ -269,5 +275,8 @@ struct GuiParameters {
     glm::vec3 sigma_a;
     glm::vec3 sigma_s;
     float g;
+    float density_offset;
+    float density_scale;
+    ImportanceSampling importance_sampling;
 };
 

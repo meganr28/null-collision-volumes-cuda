@@ -214,12 +214,9 @@ void RenderImGui(int windowWidth, int windowHeight)
 	}
 	if (ImGui::CollapsingHeader("Rendering Settings"))
 	{
-		static ImGuiComboFlags combo_flags = 0;
-		const char* items[] = { "Null-Scattering MIS", "Delta Tracking NEE", "Surface Only MIS" };
-		static int item_current_idx = 0; // Here we store our selection data as an index.
-		const char* combo_preview_value = items[item_current_idx];  // Pass in the preview value visible before opening the combo (it could be anything)
-		static int item_current_2 = 0;
 		ImGui::Combo("Integrator", (int*)&ui_integrator, "Null-Scattering MIS\0Delta Tracking NEE\0Surface MIS\0\0");
+
+		ImGui::Combo("Importance Sampling", (int*)&ui_importance_sampling, "Uni + NEE MIS\0NEE\0UNI\0\0");
 
 		ImGui::SliderInt("Max Ray Depth", &ui_max_ray_depth, 1, 16);
 		ImGui::SliderInt("Extra Depth Padding", &ui_depth_padding, 0, 16);
@@ -228,7 +225,7 @@ void RenderImGui(int windowWidth, int windowHeight)
 
 	if (ImGui::CollapsingHeader("Camera Settings"))
 	{
-		ImGui::SliderFloat("FOV", &ui_fov, 1.0f, 179.0f);
+		ImGui::SliderFloat("FOV", &ui_fov, 1.0f, 89.0f);
 		ImGui::SliderFloat("Focal Distance", &ui_focal_distance, 1.0f, 200.0f);
 		ImGui::SliderFloat("Lens Radius", &ui_lens_radius, 0.01f, 2.0f);
 	}
@@ -239,9 +236,11 @@ void RenderImGui(int windowWidth, int windowHeight)
 		float* flfssl[3] = { &ui_sigma_s.x, &ui_sigma_s.y, &ui_sigma_s.z };
 		//ImGui::SliderFloat("Absorption", &ui_sigma_a, 0.00001f, 1.0f);
 		//ImGui::SliderFloat("Scattering", &ui_sigma_s, 0.00001f, 1.0f);
-		ImGui::SliderFloat3("Absorption", *flfl, 0.00001f, 50.00f, "%.4f");
-		ImGui::SliderFloat3("Scattering", *flfssl, 0.00001f, 50.00f, "%.4f");
-		ImGui::SliderFloat("P Asymmetry", &ui_g, -1.0f, 1.0f);
+		ImGui::SliderFloat3("Absorption", *flfl, 0.00001f, 10.00f, "%.4f");
+		ImGui::SliderFloat3("Scattering", *flfssl, 0.00001f, 10.00f, "%.4f");
+		ImGui::SliderFloat("Asymmetry", &ui_g, -1.0f, 1.0f);
+		ImGui::SliderFloat("Density Offset", &ui_density_offset, 0.0f, 2.5f);
+		ImGui::SliderFloat("Density Scale", &ui_density_scale, 0.1f, 25.0f);
 	}
 
 
