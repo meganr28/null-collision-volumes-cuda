@@ -662,7 +662,7 @@ glm::vec3 Sample_channel_direct(
     }
 
     glm::vec3 T_maj = glm::vec3(1.0f);
-    int channel = 0;
+    int channel = segment.rgbWavelength;
     tMin = glm::max(tMin, 0.0f);
 
     while (true) {
@@ -679,7 +679,7 @@ glm::vec3 Sample_channel_direct(
             getCoefficients(media_density, gui_params, medium, samplePoint, segment, scattering, absorption, null);
             glm::vec3 majorant = getMajorant(medium, gui_params);
 
-            float pdf = T_maj[0] * majorant[channel];
+            float pdf = T_maj[channel] * majorant[channel];
             //if (pdf < EPSILON) {
             //    return glm::vec3(0.0f);
             //}
@@ -817,9 +817,9 @@ glm::vec3 computeVisibility(
             else {
                 //Tr *= Tr_heterogeneous(media[r.medium], pathSegments[idx], r, media_density, t_min, rng, u01);
                 glm::vec3 T_maj = Sample_channel_direct(idx, media[r.medium], pathSegments[idx], isect, media_density, direct_light_rays, t_min, T_ray, gui_params, rng, u01);
-                T_ray *= T_maj / T_maj[0];
-                direct_light_rays[idx].r_l *= T_maj / T_maj[0];
-                direct_light_rays[idx].r_u *= T_maj / T_maj[0];
+                T_ray *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
+                direct_light_rays[idx].r_l *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
+                direct_light_rays[idx].r_u *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
             }
         }
 
@@ -1039,7 +1039,7 @@ glm::vec3 Sample_channel(
     }
 
     glm::vec3 T_maj = glm::vec3(1.0f);
-    int channel = 0;
+    int channel = pathSegments[path_index].rgbWavelength;
     tMin = glm::max(tMin, 0.0f);
 
     while (true) {
@@ -1059,14 +1059,14 @@ glm::vec3 Sample_channel(
             isect.mi = *mi;
 
             // START: handleMediumInteraction
-            int heroChannel = 0;
+            //int heroChannel = 0;
 
             glm::vec3 scattering, absorption, null;
             getCoefficients(media_density, gui_params, media[mi->medium], mi->samplePoint, pathSegments[path_index], scattering, absorption, null);
 
             glm::vec3 majorant = getMajorant(media[mi->medium], gui_params);
-            float pAbsorb = absorption[heroChannel] / majorant[heroChannel];
-            float pScatter = scattering[heroChannel] / majorant[heroChannel];
+            float pAbsorb = absorption[channel] / majorant[channel];
+            float pScatter = scattering[channel] / majorant[channel];
             float pNull = 1.0f - pAbsorb - pScatter;
 
             // choose a medium event to sample (absorption, real scattering, or null scattering
@@ -1077,7 +1077,7 @@ glm::vec3 Sample_channel(
                 return glm::vec3(1.0f);
             }
             else if (eventType == NULL_SCATTER) {
-                float pdf = T_maj[heroChannel] * null[heroChannel];
+                float pdf = T_maj[channel] * null[channel];
                 if (pdf < EPSILON) {
                     pathSegments[path_index].rayThroughput = glm::vec3(0.0f);
                     return glm::vec3(1.0f);
@@ -1102,7 +1102,7 @@ glm::vec3 Sample_channel(
 
 
 
-                float pdf = T_maj[heroChannel] * scattering[heroChannel];
+                float pdf = T_maj[channel] * scattering[channel];
                 if (pdf < EPSILON) {
                     pathSegments[path_index].remainingBounces = 0;
                     return glm::vec3(1.0f);

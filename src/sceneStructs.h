@@ -228,6 +228,7 @@ struct PathSegment {
     int remainingBounces;
     int realPathLength;
     int medium;
+    int rgbWavelength;
     bool prev_hit_was_specular;
     bool prev_hit_null_material;
     bool prev_event_was_real;

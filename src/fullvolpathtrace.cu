@@ -180,6 +180,12 @@ void fullVolPathtraceFree() {
 	cudaFree(dev_bsdf_light_isects);
 }
 
+__host__ __device__ int pickRGBWavelength(float rand)
+{
+	int num_samples = 3;
+	return glm::min((int)(glm::floor(rand * (float)num_samples)), num_samples - 1);
+}
+
 /**
 * Concentric Disk Sampling from PBRT Chapter 13.6.2
 */
@@ -248,8 +254,7 @@ __global__ void generateRayFromThinLensCamera_FullVol(Camera cam, int iter, int 
 	}
 }
 
-__global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDepth,
-	PathSegment* pathSegments)
+__global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDepth, PathSegment* pathSegments)
 {
 	__shared__ PathSegment mat[BLOCK_SIZE_2D][BLOCK_SIZE_2D];
 
@@ -273,6 +278,8 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		segment.prev_hit_null_material = false;
 		segment.prev_event_was_real = true;
 		segment.medium = cam.medium;
+		//segment.rgbWavelength = pickRGBWavelength(upixel(segment.rng_engine));
+		segment.rgbWavelength = 0;
 
 		float jitterX = upixel(segment.rng_engine);
 		float jitterY = upixel(segment.rng_engine);
@@ -490,9 +497,9 @@ __global__ void sampleParticipatingMedium_FullVol(
 		}
 
 		if (rayMediumIndex >= 0) {
-			pathSegments[idx].rayThroughput *= T_maj / T_maj[0];
-			pathSegments[idx].r_l *= T_maj / T_maj[0];
-			pathSegments[idx].r_u *= T_maj / T_maj[0];
+			pathSegments[idx].rayThroughput *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
+			pathSegments[idx].r_l *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
+			pathSegments[idx].r_u *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
 		}
 	}
 }
@@ -717,6 +724,12 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	const int blockSize1d = BLOCK_SIZE_1D;
 
 	int depth = 0;
+
+	//// Pick wavelength to sample
+	//thrust::default_random_engine& rng = makeSeededRandomEngine_FullVol(iter, iter, traceDepth);
+	//thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
+	//int rgbWavelength = pickRGBWavelength(u01(rng));
+	////std::cout << "wavelength: " << rgbWavelength << std::endl;
 
 	// --- PathSegment Tracing Stage ---
 	// Shoot ray into scene, bounce between objects, push shading chunks
