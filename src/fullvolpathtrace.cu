@@ -55,6 +55,18 @@ void checkCUDAErrorFn_FullVol(const char* msg, const char* file, int line) {
 #endif
 }
 
+PerformanceTimer& timer()
+{
+	static PerformanceTimer timer;
+	return timer;
+}
+
+template<typename T>
+void printElapsedTime(T time, std::string note = "")
+{
+	std::cout << "   elapsed time: " << time << "ms    " << note << std::endl;
+}
+
 __host__ __device__
 thrust::default_random_engine makeSeededRandomEngine_FullVol(int iter, int index, int depth) {
 	int h = utilhash((1 << 31) | (depth << 22) | iter) ^ utilhash(index);
@@ -456,35 +468,47 @@ __global__ void sampleParticipatingMedium_FullVol(
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
 	{
-		if (pathSegments[idx].remainingBounces <= 0) {
+		PathSegment& segment = pathSegments[idx];
+		if (segment.remainingBounces <= 0) {
 			return;
 		}
 
-		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
+		thrust::default_random_engine& rng = segment.rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 
 		// If we have a medium, sample participating medium
-		int rayMediumIndex = pathSegments[idx].medium;
+		int rayMediumIndex = segment.medium;
 		MediumInteraction mi;
 		mi.medium = -1;
 		glm::vec3 T_maj;
 		bool scattered = false;
 		if (rayMediumIndex >= 0) {
 			if (media[rayMediumIndex].type == HOMOGENEOUS) {
-				pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
+				segment.rayThroughput *= Sample_homogeneous(media[rayMediumIndex], segment, intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
-				T_maj = Sample_channel(idx, rayMediumIndex, max_depth, media, media_size, pathSegments, materials, intersections[idx], &mi, geoms, geoms_size, tris,
-					direct_light_rays, direct_light_isects, lights, num_lights, lbvh, media_density, gui_params, rng, u01, scattered);
+				//T_maj = Sample_channel(idx, rayMediumIndex, max_depth, media, media_size, pathSegments, materials, intersections[idx], &mi, geoms, geoms_size, tris,
+				//	direct_light_rays, direct_light_isects, lights, num_lights, lbvh, media_density, gui_params, rn u01, scattered);
+				T_maj = Sample_channel(
+					idx,
+					max_depth, 
+					rayMediumIndex, 
+					pathSegments[idx], 
+					intersections[idx], 
+					direct_light_rays[idx], 
+					direct_light_isects[idx], 
+					geoms, tris, lights, media, 
+					geoms_size, num_lights, media_size,
+					materials, &mi, lbvh, media_density, gui_params, rng, u01, scattered);
 			}
 		}
-		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {
-			pathSegments[idx].remainingBounces = 0;
+		if (glm::length(segment.rayThroughput) <= 0.0f) {
+			segment.remainingBounces = 0;
 			return;
 		}
 		intersections[idx].mi = mi;
 
-		if (pathSegments[idx].remainingBounces <= 0) {
+		if (segment.remainingBounces <= 0) {
 			return;
 		}
 
@@ -493,9 +517,9 @@ __global__ void sampleParticipatingMedium_FullVol(
 		}
 
 		if (rayMediumIndex >= 0) {
-			pathSegments[idx].rayThroughput *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
-			pathSegments[idx].r_l *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
-			pathSegments[idx].r_u *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
+			segment.rayThroughput *= T_maj / T_maj[segment.rgbWavelength];
+			segment.r_l *= T_maj / T_maj[segment.rgbWavelength];
+			segment.r_u *= T_maj / T_maj[segment.rgbWavelength];
 		}
 	}
 }
@@ -599,8 +623,8 @@ __global__ void handleSurfaceInteraction_FullVol(
 		if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
 		  if (!pathSegments[idx].prev_hit_was_specular) {
 
-			glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris,
-			  media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
+			glm::vec3 Ld = directLightSample(idx, false, pathSegments[idx], materials, intersection, geoms, geoms_size, tris,
+			  media, media_size, media_density, direct_light_rays[idx], direct_light_isects[idx], lights, num_lights, lbvh, gui_params, rng, u01);
 
 			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
@@ -765,9 +789,10 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	thrust::device_ptr<ShadeableIntersection> dev_thrust_intersections = thrust::device_pointer_cast(dev_intersections);
 
 	while (!iterationComplete) {
-		//std::cout << "depth: " << depth << std::endl;
+		//std::cout << "DEPTH: " << depth << std::endl;
 		// When intersecting with primitive, determine if there is a medium transition or not
 		// Update isect struct's mediumInterface member variable with the appropriate mediumInterface
+		//timer().startGpuTimer();
 		computeIntersections_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
 			depth
 			, pixelcount_fullvol
@@ -780,6 +805,8 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			, dev_intersections
 			, dev_lbvh
 			);
+		//timer().endGpuTimer();
+		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Compute Intersections, CUDA Measured)");
 
 #ifdef MEDIUM_SORT
 		cudaDeviceSynchronize();
@@ -797,6 +824,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 		// Check if throughput is black, and break out of loop (set remainingBounces to 0)
 		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distribution
 		// Else, handle surface interaction
+		//timer().startGpuTimer();
 		sampleParticipatingMedium_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
 			pixelcount_fullvol,
 			traceDepth,
@@ -816,7 +844,10 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			dev_lbvh,
 			dev_media_density,
 			gui_params);
+		//timer().endGpuTimer();
+		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Sample Participating Medium, CUDA Measured)");
 
+		//timer().startGpuTimer();
 		handleSurfaceInteraction_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
 			pixelcount_fullvol,
 			traceDepth,
@@ -836,6 +867,8 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			dev_lbvh,
 			dev_media_density,
 			gui_params);
+		//timer().endGpuTimer();
+		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Handle Surface Interactions, CUDA Measured)");
 		
 		// RUSSIAN ROULETTE
 		if (depth > 4)
