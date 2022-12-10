@@ -231,6 +231,7 @@ struct PathSegment {
     glm::vec3 r_u;
     glm::vec3 r_l;
     thrust::default_random_engine rng_engine;
+    int pixelIndex;
     int remainingBounces;
     int realPathLength;
     int medium;

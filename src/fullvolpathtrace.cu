@@ -30,8 +30,8 @@
 #define ENABLE_SQUAREPLANES
 
 #define BOUNCE_PADDING 128
-
-
+//#define STREAM_COMPACTION
+//#define MEDIUM_SORT
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn_FullVol(msg, FILENAME, __LINE__)
@@ -314,7 +314,7 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 
 		segment.ray.direction_inv = 1.0f / segment.ray.direction;
 		segment.lastRealRay = segment.ray;
-
+		segment.pixelIndex = index;
 		segment.remainingBounces = traceDepth;
 		segment.realPathLength = 0;
 
@@ -659,7 +659,7 @@ __global__ void finalGather_FullVol(int nPaths, glm::vec3* image, PathSegment* i
 	if (index < nPaths)
 	{
 		PathSegment iterationPath = iterationPaths[index];
-		image[index] += iterationPath.accumulatedIrradiance;
+		image[iterationPath.pixelIndex] += iterationPath.accumulatedIrradiance;
 	}
 }
 
@@ -704,6 +704,15 @@ struct is_done
 	}
 };
 
+struct medium_sort
+{
+	__host__ __device__
+		bool operator()(const PathSegment& p0, const PathSegment& p1)
+	{
+		return p0.medium < p1.medium;
+	}
+};
+
 struct material_sort
 {
 	__host__ __device__
@@ -736,7 +745,6 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	//thrust::default_random_engine& rng = makeSeededRandomEngine_FullVol(iter, iter, traceDepth);
 	//thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 	//int rgbWavelength = pickRGBWavelength(u01(rng));
-	////std::cout << "wavelength: " << rgbWavelength << std::endl;
 
 	// --- PathSegment Tracing Stage ---
 	// Shoot ray into scene, bounce between objects, push shading chunks
@@ -748,6 +756,13 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	// gen ray
 	generateRayFromCamera_FullVol << <blocksPerGrid2d, blockSize2d >> > (cam,
 		iter, traceDepth, dev_paths);
+
+	// sorting variables
+	PathSegment* dev_path_end = dev_paths + pixelcount_fullvol;
+	int num_paths = dev_path_end - dev_paths;
+	int compact_num_paths = num_paths;
+	thrust::device_ptr<PathSegment> dev_thrust_paths = thrust::device_pointer_cast(dev_paths);
+	thrust::device_ptr<ShadeableIntersection> dev_thrust_intersections = thrust::device_pointer_cast(dev_intersections);
 
 	while (!iterationComplete) {
 		//std::cout << "depth: " << depth << std::endl;
@@ -766,8 +781,18 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			, dev_lbvh
 			);
 
+#ifdef MEDIUM_SORT
+		cudaDeviceSynchronize();
+#endif
+
 		depth++;
-		
+
+		// Sort paths by medium type
+#ifdef MEDIUM_SORT
+		dev_thrust_paths = thrust::device_pointer_cast(dev_paths);
+		thrust::sort_by_key(dev_thrust_paths, dev_thrust_paths + compact_num_paths, dev_intersections, medium_sort());
+#endif
+
 		// Attenuating ray throughput with medium stuff (phase function)
 		// Check if throughput is black, and break out of loop (set remainingBounces to 0)
 		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distribution
@@ -822,7 +847,13 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 				);
 		}
 
-		if (depth == traceDepth + depth_padding) { iterationComplete = true; }
+#ifdef STREAM_COMPACTION
+		thrust::device_ptr<PathSegment> dev_thrust_path_end = thrust::stable_partition(dev_thrust_paths, dev_thrust_paths + compact_num_paths, is_done());
+		dev_path_end = dev_thrust_path_end.get();
+		compact_num_paths = dev_path_end - dev_paths;
+#endif
+
+		if (depth == traceDepth + depth_padding || dev_paths == dev_path_end) { iterationComplete = true; }
 	}
 
 
