@@ -13,12 +13,12 @@
 #include <tiny_gltf.h>
 
 Scene::Scene(string filename, GuiParameters& gui_params) {
-    cout << "Reading scene from " << filename << " ..." << endl;
-    cout << " " << endl;
+    std::cout << "Reading scene from " << filename << " ..." << endl;
+    std::cout << " " << endl;
     char* fname = (char*)filename.c_str();
     fp_in.open(fname);
     if (!fp_in.is_open()) {
-        cout << "Error reading from file - aborting!" << endl;
+        std::cout << "Error reading from file - aborting!" << endl;
         throw;
     }
 
@@ -30,19 +30,23 @@ Scene::Scene(string filename, GuiParameters& gui_params) {
             vector<string> tokens = utilityCore::tokenizeString(line);
             if (strcmp(tokens[0].c_str(), "MATERIAL") == 0) {
                 loadMaterial(tokens[1], gui_params);
-                cout << " " << endl;
+                std::cout << " " << endl;
             } 
             else if (strcmp(tokens[0].c_str(), "MEDIUM") == 0) {
                 loadMedium(tokens[1], gui_params);
-                cout << " " << endl;
+                std::cout << " " << endl;
             }
             else if (strcmp(tokens[0].c_str(), "OBJECT") == 0) {
                 loadGeom(tokens[1], gui_params);
-                cout << " " << endl;
+                std::cout << " " << endl;
             }
             else if (strcmp(tokens[0].c_str(), "CAMERA") == 0) {
                 loadCamera();
-                cout << " " << endl;
+                std::cout << " " << endl;
+            }
+            else if (strcmp(tokens[0].c_str(), "ENVMAP") == 0) {
+                loadEnvironmentMap(tokens[1]);
+                std::cout << " " << endl;
             }
         }
     }
@@ -52,6 +56,27 @@ Scene::Scene(string filename, GuiParameters& gui_params) {
     {
         generateLBVH(this);
     }
+}
+
+
+int Scene::loadEnvironmentMap(string file_name) {
+    auto texture = new image(file_name);
+    env_map_width = texture->xSize;
+    env_map_height = texture->ySize;
+    for (int y = 0; y < env_map_height; y++) {
+        for (int x = 0; x < env_map_width; x++) {
+            int i = y * env_map_width + x;
+
+            //std::cout << texture->pixels[i].x << " " << texture->pixels[i].y << " " << texture->pixels[i].z << std::endl;;
+
+        }
+    }
+
+
+    cudaMalloc(&dev_environment_map, texture->xSize * texture->ySize * sizeof(glm::vec3));
+    cudaMemcpy(dev_environment_map, texture->pixels, texture->xSize * texture->ySize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
+    delete texture;
+    return 1;
 }
 
 int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
@@ -122,6 +147,7 @@ int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
             vector<string> tokens = utilityCore::tokenizeString(line);
             newGeom.mediumInterface.inside = atoi(tokens[1].c_str());
             newGeom.mediumInterface.outside = atoi(tokens[2].c_str());
+
             cout << "Connecting Geom " << objectid << " to Medium Interface " << newGeom.mediumInterface.inside << " " << newGeom.mediumInterface.outside << "..." << endl;
         }
 
@@ -326,6 +352,18 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
             }
         }
 
+        if (newMedium.type == HOMOGENEOUS) {
+            newMedium.aabb_min = glm::vec3(0.0f);
+            newMedium.aabb_max = glm::vec3(0.0f);
+            newMedium.index_min = glm::vec3(0.0f);
+            newMedium.index_max = glm::vec3(0.0f);
+            newMedium.gx = 0;
+            newMedium.gx = 0;
+            newMedium.gz = 0;
+            newMedium.maxDensity = 0.1f;
+            newMedium.invMaxDensity = 10.0f;
+        }
+
         if (newMedium.type == HETEROGENEOUS) {
             utilityCore::safeGetline(fp_in, line);
             if (!line.empty() && fp_in.good()) {
@@ -457,7 +495,7 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
 int Scene::loadOBJ(Geom &newGeom, int& geomTris, string filename, int objectid)
 {
     // Load obj using tinyobjloader
-    std::string inputfile = "../obj/" + filename;
+    std::string inputfile = filename;
     tinyobj::ObjReaderConfig reader_config;
     tinyobj::ObjReader reader;
 

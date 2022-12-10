@@ -38,18 +38,13 @@ DIFFUSE_BRDF
 IOR    			1.55
 EMITTANCE   	0
 
-// Homogeneous medium
-MEDIUM 0
-homogeneous
-ABSORPTION 0.01
-SCATTERING 0.1
-ASYM_G     0.001
+ENVMAP ../scenes/textures/environment_maps/Arches_E_PineTree/Arches_E_PineTree_3k.hdr
 
 // Camera
 CAMERA
-RES         1280 720
+RES         512 512
 FOVY        19.5
-ITERATIONS  5000
+ITERATIONS  10000
 DEPTH       5
 FILE        cornell
 FOCAL_DISTANCE	17.9
@@ -125,9 +120,10 @@ SCALE       20 10 20
 
 // long cube
 OBJECT 7
-cube
-material -1
-mediuminterface 0 -1
+mesh
+../scenes/dragon.obj
+material 4
+mediuminterface -1 -1
 TRANS       0 1 0
 ROTAT       0 0 0
 SCALE       5 5 5

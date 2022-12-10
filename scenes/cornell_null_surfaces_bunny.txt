@@ -48,7 +48,7 @@ ASYM_G     0.001
 
 // Camera
 CAMERA
-RES         512 512
+RES         1920 1080
 FOVY        19.5
 ITERATIONS  5000
 DEPTH       1

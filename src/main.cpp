@@ -28,8 +28,8 @@ ImportanceSampling ui_importance_sampling = DEFAULT_IMPORTANCE_SAMPLING;
 ImportanceSampling last_importance_sampling = DEFAULT_IMPORTANCE_SAMPLING;
 
 // Path Tracing Parameters
-int ui_max_ray_depth = 8;
-int last_max_ray_depth = 8;
+int ui_max_ray_depth = 2;
+int last_max_ray_depth = 2;
 int ui_depth_padding = 2;
 int last_depth_padding = 2;
 int ui_refresh_bit = 0;

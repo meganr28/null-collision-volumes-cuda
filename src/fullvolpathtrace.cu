@@ -366,6 +366,7 @@ __global__ void computeIntersections_FullVol(
 
 		if (isect.t >= MAX_INTERSECT_DIST) {
 			// hits nothing
+			
 			pathSegments[path_index].remainingBounces = 0;
 		}
 		else {
