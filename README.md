@@ -12,8 +12,8 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
 ### Overview
 
 <p align="center">
-  <img width="507" alt="mulit_color_cloud" src="https://user-images.githubusercontent.com/20704997/205739566-2ea7d4e6-6f81-41ea-a8db-1dccc50bc5a7.png">
-<p align="center"><em>Intel Cloud rendered with the null-scattering MIS framework</em></p>
+  <img width="1920" alt="mulit_color_cloud" src="sgsg.PNG">
+<p align="center"><em>Full WDAS Cloud (~3GB) rendered with the null-scattering MIS framework</em></p>
 
 **Physically-based volume rendering** is widely used in the entertainment and scientific engineering fields for rendering phenomena such as clouds, fog, smoke, and fire. This usually involves complex lighting computations, especially for volumes that vary spatially and spectrally. Production renderers leverage multiple importance sampling (MIS) to accelerate image synthesis for rendering surfaces. MIS techniques for volumes are unbiased only for homogeneous media. Therefore, we require a new technique to perform MIS for heterogeneous media. 
 
