@@ -596,16 +596,16 @@ __global__ void handleSurfaceInteraction_FullVol(
 
 		pathSegments[idx].prev_hit_was_specular = material.type == SPEC_BRDF || material.type == SPEC_BTDF || material.type == SPEC_GLASS;
 
-    if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
-      if (!pathSegments[idx].prev_hit_was_specular) {
+		if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
+		  if (!pathSegments[idx].prev_hit_was_specular) {
 
-        glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris,
-          media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
+			glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris,
+			  media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
 
-        pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
+			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
-      }
-    }
+		  }
+		}
 
 		glm::vec3 wi = glm::vec3(0.0f);
 		float pdf = 0.0f;

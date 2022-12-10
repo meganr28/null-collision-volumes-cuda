@@ -837,12 +837,6 @@ glm::vec3 computeVisibility(
         // if the intersected object IS the light source we selected, we are done
         if (obj_ID == r.light_ID) {
             num_iters++;
-            //if (T_ray.x > 0.99f && T_ray.x < 1.01f && T_ray.y > 0.99f && T_ray.y < 1.01f && T_ray.z > 0.99f && T_ray.z < 1.01f) {
-            //    pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
-            //}
-            //if (T_ray.x < 0.5f && T_ray.y < 0.5f && T_ray.z < 0.5f) {
-            //    pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
-            //}
             return T_ray;
         }
 
@@ -1183,15 +1177,11 @@ bool handleMediumInteraction(
     MediumEvent eventType = sampleMediumEvent(pAbsorb, pScatter, pNull, u01(rng));
 
     if (eventType == ABSORB) {
-        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-        //pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
         pathSegments[idx].remainingBounces = 0;
         return false;
     }
     else if (eventType == NULL_SCATTER) {
-        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
         // TODO: maybe decrement remaining bounces
-        //pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
         pathSegments[idx].prev_event_was_real = false;
         float pdf = T_maj[heroChannel] * null[heroChannel];
         if (pdf < EPSILON) {
@@ -1206,7 +1196,6 @@ bool handleMediumInteraction(
         }
 
         if (glm::length(pathSegments[idx].rayThroughput) <= 0.00001f || glm::length(pathSegments[idx].r_u) <= 0.00001f) {
-            //pathSegments[idx].accumulatedIrradiance += glm::vec3(20, 0, 0);
             pathSegments[idx].remainingBounces = 0;
             return false;
         }
@@ -1216,8 +1205,6 @@ bool handleMediumInteraction(
         return true;
     }
     else {
-        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
-        //pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
         pathSegments[idx].prev_event_was_real = true;
         pathSegments[idx].realPathLength++;
 

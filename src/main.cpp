@@ -338,10 +338,14 @@ void runCuda() {
 	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), 
 		glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), 
 		ui_g, 
+		ui_max_ray_depth,
+		ui_depth_padding,
+		refresh_rate,
+		ui_refresh_bit,
 		ui_density_offset,
 		ui_density_scale,
 		ui_importance_sampling };
-	
+
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
 	if (iteration == 0) {
