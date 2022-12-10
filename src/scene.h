@@ -8,7 +8,7 @@
 #include "glm/gtc/matrix_transform.hpp"
 #include "utilities.h"
 #include "sceneStructs.h"
-
+#include "image.h"
 //#include "C:/src/openvdb/openvdb/openvdb/tools/LevelSetSphere.h"
 //#include "openvdb/NanoVDB.h"
 //#include "openvdb/util/GridBuilder.h"
@@ -36,6 +36,7 @@ private:
     int loadMedium(string mediumid, GuiParameters& gui_params);
     int loadGeom(string objectid, GuiParameters& gui_params);
     int loadGLTF(string objectid);
+    int loadEnvironmentMap(string file_name);
     int loadCamera();
 
 
@@ -77,4 +78,9 @@ public:
     std::vector<BVHNode_GPU> bvh_nodes_gpu;
     std::vector<TriBounds> tri_bounds;
     RenderState state;
+
+    int environment_map_ID;
+    glm::vec3* dev_environment_map = NULL;
+    int env_map_width;
+    int env_map_height;
 };

@@ -18,6 +18,12 @@ enum IntegratorType {
     SURFACE_ONLY_MIS
 };
 
+enum ImportanceSampling {
+    UNI_NEE_MIS,
+    NEE,
+    UNI
+};
+
 enum MediumType {
     HOMOGENEOUS,
     HETEROGENEOUS,
@@ -281,5 +287,8 @@ struct GuiParameters {
     int depth_padding;
     int refresh_rate;
     int refresh_bit;
+    float density_offset;
+    float density_scale;
+    ImportanceSampling importance_sampling;
 };
 

@@ -398,29 +398,33 @@ __global__ void computeIntersections_FullVol(
 			
 		}
 
-		for (int j = 0; j < media_size; j++) {
-			if (media[j].type == HOMOGENEOUS) continue;
+		if (media_size > 0) {
+			for (int j = 0; j < media_size; j++) {
+				if (media[j].type == HOMOGENEOUS) continue;
 
-			const Medium& medium = media[j];
-			float tMin, tMax;
-			bool intersectAABB = aabbIntersectionTest(pathSegments[path_index], medium.aabb_min, medium.aabb_max, pathSegments[path_index].ray, tMin, tMax, t, false);
+				const Medium& medium = media[j];
+				float tMin, tMax;
+				bool intersectAABB = aabbIntersectionTest(pathSegments[path_index], medium.aabb_min, medium.aabb_max, pathSegments[path_index].ray, tMin, tMax, t, false);
 
-			if (intersectAABB && isect.t > t) {
-				isect.t = t;
-				isect.materialId = -1;
-				isect.surfaceNormal = glm::vec3(0.0f);
+				if (intersectAABB && isect.t > t) {
+					isect.t = t;
+					isect.materialId = -1;
+					isect.surfaceNormal = glm::vec3(0.0f);
 
-				// TODO: change this to handle more advanced cases
-				isect.mediumInterface.inside = j;
-				isect.mediumInterface.outside = -1;
+					// TODO: change this to handle more advanced cases
+					isect.mediumInterface.inside = j;
+					isect.mediumInterface.outside = -1;
 
-				isect.tMin = tMin;
-				isect.tMax = tMax;
+					isect.tMin = tMin;
+					isect.tMax = tMax;
+				}
 			}
 		}
 
+
 		if (isect.t >= MAX_INTERSECT_DIST) {
 			// hits nothing
+			
 			pathSegments[path_index].remainingBounces = 0;
 		}
 		else {
@@ -479,14 +483,6 @@ __global__ void sampleParticipatingMedium_FullVol(
 			return;
 		}
 		intersections[idx].mi = mi;
-
-		// Handle medium interaction
-		/*bool scattered = false;
-		if (mi.medium >= 0) {
-			//pathSegments[idx].rayThroughput *= handleMediumInteraction(max_depth, media[rayMediumIndex], pathSegments[idx], intersections[idx], mi, media_density, rayMediumIndex, rng, u01);
-			scattered = handleMediumInteraction(idx, max_depth, T_maj, pathSegments, materials, intersections[idx], mi, geoms, geoms_size, tris, tris_size,
-				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, bvh_nodes, gui_params, rng, u01);
-		}*/
 
 		if (pathSegments[idx].remainingBounces <= 0) {
 			return;
@@ -576,6 +572,16 @@ __global__ void handleSurfaceInteraction_FullVol(
 							light_ID = light_iter;
 							break;
 						}
+						float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
+						float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
+						pdf_L *= (1.0f / (float)num_lights);
+						if (gui_params.importance_sampling == UNI) {
+							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
+						}
+						else if (gui_params.importance_sampling == NEE) {
+							pathSegments[idx].r_l *= pdf_L;
+							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+						}
 					}
 					float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
 					float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
@@ -590,15 +596,16 @@ __global__ void handleSurfaceInteraction_FullVol(
 
 		pathSegments[idx].prev_hit_was_specular = material.type == SPEC_BRDF || material.type == SPEC_BTDF || material.type == SPEC_GLASS;
 
-		// hit a normal surface
-		if (!pathSegments[idx].prev_hit_was_specular) {
+    if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
+      if (!pathSegments[idx].prev_hit_was_specular) {
 
-			glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris,
-				media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
+        glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris,
+          media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
 
-			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
+        pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
-		}
+      }
+    }
 
 		glm::vec3 wi = glm::vec3(0.0f);
 		float pdf = 0.0f;

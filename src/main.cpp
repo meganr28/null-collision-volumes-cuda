@@ -8,6 +8,7 @@
 #include <glm/gtx/string_cast.hpp>
 
 #define DEFAULT_INTEGRATOR NULL_SCATTERING_MIS
+#define DEFAULT_IMPORTANCE_SAMPLING UNI_NEE_MIS
 
 static std::string startTimeString;
 
@@ -23,9 +24,12 @@ IntegratorType ui_integrator = DEFAULT_INTEGRATOR;
 IntegratorType last_integrator = DEFAULT_INTEGRATOR;
 IntegratorType previous_integrator = DEFAULT_INTEGRATOR;
 
+ImportanceSampling ui_importance_sampling = DEFAULT_IMPORTANCE_SAMPLING;
+ImportanceSampling last_importance_sampling = DEFAULT_IMPORTANCE_SAMPLING;
+
 // Path Tracing Parameters
-int ui_max_ray_depth = 8;
-int last_max_ray_depth = 8;
+int ui_max_ray_depth = 2;
+int last_max_ray_depth = 2;
 int ui_depth_padding = 2;
 int last_depth_padding = 2;
 int ui_refresh_bit = 0;
@@ -47,6 +51,10 @@ glm::vec3 ui_sigma_s = glm::vec3(0.15f);
 glm::vec3 last_sigma_s = glm::vec3(0.15f);
 float ui_g= 0.15f;
 float last_g = 0.15f;
+float ui_density_offset = 0.0f;
+float last_density_offset = 0.0f;
+float ui_density_scale = 1.0f;
+float last_density_scale = 1.0f;
 
 
 static bool camchanged = true;
@@ -181,6 +189,11 @@ void saveImage() {
 
 void runCuda() {
 
+	if (last_importance_sampling != ui_importance_sampling) {
+		last_importance_sampling = ui_importance_sampling;
+		camchanged = true;
+
+	}
 
 	if (last_max_ray_depth != ui_max_ray_depth) {
 		last_max_ray_depth = ui_max_ray_depth;
@@ -198,6 +211,8 @@ void runCuda() {
 		refresh_rate = 1 << ui_refresh_bit;
 		camchanged = true;
 	}
+
+
 
 	if (last_fov != ui_fov) {
 		last_fov = ui_fov;
@@ -224,6 +239,16 @@ void runCuda() {
 	}
 	if (last_g != ui_g) {
 		last_g = ui_g;
+		camchanged = true;
+	}
+
+	if (last_density_offset != ui_density_offset) {
+		last_density_offset = ui_density_offset;
+		camchanged = true;
+	}
+
+	if (last_density_scale != ui_density_scale) {
+		last_density_scale = ui_density_scale;
 		camchanged = true;
 	}
 
@@ -261,6 +286,10 @@ void runCuda() {
 		float xscaled = (yscaled * scene->state.camera.resolution.x) / scene->state.camera.resolution.y;
 		float fovx = (atan(xscaled) * 180) / PI;
 		scene->state.camera.fov = glm::vec2(fovx, ui_fov);
+
+		scene->state.camera.pixelLength = glm::vec2(2 * xscaled / (float)scene->state.camera.resolution.x,
+			2 * yscaled / (float)scene->state.camera.resolution.y);
+
 		scene->state.camera.focal_distance = ui_focal_distance;
 		scene->state.camera.lens_radius = ui_lens_radius;
 
@@ -306,7 +335,12 @@ void runCuda() {
 
 	
 	//GuiParameters gui_params = { glm::vec3(ui_sigma_a), glm::vec3(ui_sigma_s), ui_g };
-	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), ui_g };
+	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), 
+		glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), 
+		ui_g, 
+		ui_density_offset,
+		ui_density_scale,
+		ui_importance_sampling };
 	
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
