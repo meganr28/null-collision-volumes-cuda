@@ -277,7 +277,6 @@ struct SceneInfo {
     int geoms_size;
     int media_size;
     int lights_size;
-    int pixel_count;
 };
 
 struct GuiParameters {

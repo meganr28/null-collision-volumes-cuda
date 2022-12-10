@@ -335,16 +335,15 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 }
 
 __global__ void computeIntersections_FullVol(
-	int depth
-	, int num_paths
+	int num_paths
+	, int depth
 	, PathSegment* pathSegments
 	, Geom* geoms
-	, int geoms_size
 	, Tri* tris
 	, Medium* media
-	, int media_size
 	, ShadeableIntersection* intersections
 	, LBVHNode* lbvh
+	, SceneInfo scene_info
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -364,7 +363,7 @@ __global__ void computeIntersections_FullVol(
 		glm::vec3 tmp_normal;
 		int obj_ID = -1;
 
-		for (int i = 0; i < geoms_size; ++i)
+		for (int i = 0; i < scene_info.geoms_size; ++i)
 		{
 			Geom& geom = geoms[i];
 
@@ -410,8 +409,8 @@ __global__ void computeIntersections_FullVol(
 			
 		}
 
-		if (media_size > 0) {
-			for (int j = 0; j < media_size; j++) {
+		if (scene_info.media_size > 0) {
+			for (int j = 0; j < scene_info.media_size; j++) {
 				if (media[j].type == HOMOGENEOUS) continue;
 
 				const Medium& medium = media[j];
@@ -447,23 +446,20 @@ __global__ void computeIntersections_FullVol(
 
 __global__ void sampleParticipatingMedium_FullVol(
 	int num_paths,
-	int max_depth,
 	int depth,
 	PathSegment* pathSegments,
 	Material* materials,
 	ShadeableIntersection* intersections,
 	Geom* geoms,
-	int geoms_size,
 	Tri* tris,
 	Medium* media,
-	int media_size,
+	const nanovdb::NanoGrid<float>* media_density,
 	MISLightRay* direct_light_rays,
 	MISLightIntersection* direct_light_isects,
 	Light* lights,
-	int num_lights,
 	LBVHNode* lbvh,
-	const nanovdb::NanoGrid<float>* media_density,
-	GuiParameters gui_params)
+	GuiParameters gui_params,
+	SceneInfo scene_info)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
@@ -491,15 +487,13 @@ __global__ void sampleParticipatingMedium_FullVol(
 				//	direct_light_rays, direct_light_isects, lights, num_lights, lbvh, media_density, gui_params, rn u01, scattered);
 				T_maj = Sample_channel(
 					idx,
-					max_depth, 
 					rayMediumIndex, 
 					pathSegments[idx], 
 					intersections[idx], 
 					direct_light_rays[idx], 
 					direct_light_isects[idx], 
 					geoms, tris, lights, media, 
-					geoms_size, num_lights, media_size,
-					materials, &mi, lbvh, media_density, gui_params, rng, u01, scattered);
+					materials, &mi, lbvh, media_density, gui_params, scene_info, rng, u01, scattered);
 			}
 		}
 		if (glm::length(segment.rayThroughput) <= 0.0f) {
@@ -526,23 +520,20 @@ __global__ void sampleParticipatingMedium_FullVol(
 
 __global__ void handleSurfaceInteraction_FullVol(
 	int num_paths,
-	int max_depth,
 	int depth,
 	PathSegment* pathSegments,
 	Material* materials,
 	ShadeableIntersection* intersections,
 	Geom* geoms,
-	int geoms_size,
 	Tri* tris,
 	Medium* media,
-	int media_size,
+	const nanovdb::NanoGrid<float>* media_density,
 	MISLightRay* direct_light_rays,
 	MISLightIntersection* direct_light_isects,
 	Light* lights,
-	int num_lights,
 	LBVHNode* lbvh,
-	const nanovdb::NanoGrid<float>* media_density,
-	GuiParameters gui_params)
+	GuiParameters gui_params,
+	SceneInfo scene_info)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
@@ -580,7 +571,7 @@ __global__ void handleSurfaceInteraction_FullVol(
 
 		// Hit a light
 		if (material.emittance > 0.0f) {
-			if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
+			if (pathSegments[idx].remainingBounces == gui_params.max_depth || pathSegments[idx].prev_hit_was_specular) {
 				// only color lights on first hit
 				pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pathSegments[idx].r_u;
 			}
@@ -591,14 +582,14 @@ __global__ void handleSurfaceInteraction_FullVol(
 				}
 				else {
 					int light_ID = -1;
-					for (int light_iter = 0; light_iter < num_lights; light_iter++) {
+					for (int light_iter = 0; light_iter < scene_info.lights_size; light_iter++) {
 						if (lights[light_iter].geom_ID == intersection.objID) {
 							light_ID = light_iter;
 							break;
 						}
 						float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
 						float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
-						pdf_L *= (1.0f / (float)num_lights);
+						pdf_L *= (1.0f / (float)scene_info.lights_size);
 						if (gui_params.importance_sampling == UNI) {
 							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
 						}
@@ -609,7 +600,7 @@ __global__ void handleSurfaceInteraction_FullVol(
 					}
 					float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
 					float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
-					pdf_L *= (1.0f / (float)num_lights);
+					pdf_L *= (1.0f / (float)scene_info.lights_size);
 					pathSegments[idx].r_l *= pdf_L;
 					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
 				}
@@ -623,8 +614,8 @@ __global__ void handleSurfaceInteraction_FullVol(
 		if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
 		  if (!pathSegments[idx].prev_hit_was_specular) {
 
-			glm::vec3 Ld = directLightSample(idx, false, pathSegments[idx], materials, intersection, geoms, geoms_size, tris,
-			  media, media_size, media_density, direct_light_rays[idx], direct_light_isects[idx], lights, num_lights, lbvh, gui_params, rng, u01);
+			glm::vec3 Ld = directLightSample(idx, false, pathSegments[idx], materials, intersection, geoms, tris,
+			  media, media_density, direct_light_rays[idx], direct_light_isects[idx], lights, lbvh, gui_params, scene_info, rng, u01);
 
 			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
@@ -746,7 +737,7 @@ struct material_sort
 	}
 };
 
-void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params, int depth_padding, int refresh_rate, int refresh_bit) {
+void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params, SceneInfo& scene_info) {
 
 	//std::cout << "============================== " << iter << " ==============================" << std::endl;
 
@@ -794,16 +785,15 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 		// Update isect struct's mediumInterface member variable with the appropriate mediumInterface
 		//timer().startGpuTimer();
 		computeIntersections_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
-			depth
-			, pixelcount_fullvol
+			compact_num_paths
+			, depth
 			, dev_paths
 			, dev_geoms
-			, hst_scene->geoms.size()
 			, dev_tris
 			, dev_media
-			, hst_scene->media.size()
 			, dev_intersections
 			, dev_lbvh
+			, scene_info
 			);
 		//timer().endGpuTimer();
 		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Compute Intersections, CUDA Measured)");
@@ -826,47 +816,41 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 		// Else, handle surface interaction
 		//timer().startGpuTimer();
 		sampleParticipatingMedium_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
-			pixelcount_fullvol,
-			traceDepth,
+			compact_num_paths,
 			depth,
 			dev_paths,
 			dev_materials,
 			dev_intersections,
 			dev_geoms,
-			hst_scene->geoms.size(),
 			dev_tris,
 			dev_media,
-			hst_scene->media.size(),
+			dev_media_density,
 			dev_direct_light_rays,
 			dev_direct_light_isects,
 			dev_lights,
-			hst_scene->lights.size(),
 			dev_lbvh,
-			dev_media_density,
-			gui_params);
+			gui_params,
+			scene_info);
 		//timer().endGpuTimer();
 		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Sample Participating Medium, CUDA Measured)");
 
 		//timer().startGpuTimer();
 		handleSurfaceInteraction_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
-			pixelcount_fullvol,
-			traceDepth,
+			compact_num_paths,
 			depth,
 			dev_paths,
 			dev_materials,
 			dev_intersections,
 			dev_geoms,
-			hst_scene->geoms.size(),
 			dev_tris,
 			dev_media,
-			hst_scene->media.size(),
+			dev_media_density,
 			dev_direct_light_rays,
 			dev_direct_light_isects,
 			dev_lights,
-			hst_scene->lights.size(),
 			dev_lbvh,
-			dev_media_density,
-			gui_params);
+			gui_params,
+			scene_info);
 		//timer().endGpuTimer();
 		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Handle Surface Interactions, CUDA Measured)");
 		
@@ -886,7 +870,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 		compact_num_paths = dev_path_end - dev_paths;
 #endif
 
-		if (depth == traceDepth + depth_padding || dev_paths == dev_path_end) { iterationComplete = true; }
+		if (depth == traceDepth + gui_params.depth_padding || dev_paths == dev_path_end) { iterationComplete = true; }
 	}
 
 
@@ -894,7 +878,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	finalGather_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (pixelcount_fullvol, dev_image, dev_paths);
 
 
-	if ((iter & refresh_rate) >> refresh_bit || iter < 2) {
+	if ((iter & gui_params.refresh_rate) >> gui_params.refresh_bit || iter < 2) {
 		// 	// Send results to OpenGL buffer for rendering
 		sendImageToPBO_FullVol << <blocksPerGrid2d, blockSize2d >> > (pbo, cam.resolution, iter, dev_image);
 

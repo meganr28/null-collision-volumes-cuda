@@ -726,17 +726,15 @@ glm::vec3 computeVisibility(
     int idx,
     PathSegment& segment,
     Geom* geoms,
-    int geoms_size,
     Tri* tris,
     Medium* media,
-    int media_size,
     const nanovdb::NanoGrid<float>* media_density,
     MISLightRay& direct_ray,
     MISLightIntersection& direct_isect,
     Light* lights,
-    int num_lights,
     LBVHNode* lbvh,
     GuiParameters& gui_params,
+    SceneInfo& scene_info,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
 {
@@ -757,7 +755,7 @@ glm::vec3 computeVisibility(
         glm::vec3 tmp_normal;
         int mat_id = -1;
 
-        for (int i = 0; i < geoms_size; ++i)
+        for (int i = 0; i < scene_info.geoms_size; ++i)
         {
             Geom& geom = geoms[i];
 
@@ -791,8 +789,8 @@ glm::vec3 computeVisibility(
             }
         }
 
-        if (media_size > 0) {
-            for (int j = 0; j < media_size; j++) {
+        if (scene_info.media_size > 0) {
+            for (int j = 0; j < scene_info.media_size; j++) {
                 if (media[j].type == HOMOGENEOUS) continue;
 
                 const Medium& medium = media[j];
@@ -861,17 +859,15 @@ glm::vec3 directLightSample(
     Material* materials,
     ShadeableIntersection& intersection,
     Geom* geoms,
-    int geoms_size,
     Tri* tris,
     Medium* media,
-    int media_size,
     const nanovdb::NanoGrid<float>* media_density,
     MISLightRay& direct_ray,
     MISLightIntersection& direct_isect,
     Light* lights,
-    int num_lights,
     LBVHNode* lbvh,
     GuiParameters& gui_params,
+    SceneInfo& scene_info,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01) 
 {
@@ -886,7 +882,7 @@ glm::vec3 directLightSample(
     }
 
     // choose light to directly sample
-    direct_ray.light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)num_lights)), num_lights - 1)].geom_ID;
+    direct_ray.light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)scene_info.lights_size)), scene_info.lights_size - 1)].geom_ID;
     Geom& light = geoms[direct_ray.light_ID];
     Material& light_material = materials[light.materialid];
 
@@ -949,14 +945,14 @@ glm::vec3 directLightSample(
     }
 
     // compute visibility
-    glm::vec3 T_ray = computeVisibility(idx, segment, geoms, geoms_size, tris, media, media_size, media_density,
-        direct_ray, direct_isect, lights, num_lights, lbvh, gui_params, rng, u01);
+    glm::vec3 T_ray = computeVisibility(idx, segment, geoms, tris, media, media_density,
+        direct_ray, direct_isect, lights, lbvh, gui_params, scene_info, rng, u01);
  
     if (gui_params.importance_sampling == NEE) {
-        direct_isect.LTE *= T_ray * (float)num_lights / pdf_L;
+        direct_isect.LTE *= T_ray * (float)scene_info.lights_size / pdf_L;
     }
     else if (gui_params.importance_sampling == UNI_NEE_MIS) {
-        direct_ray.r_l *= segment.r_u * pdf_L / (float)num_lights;
+        direct_ray.r_l *= segment.r_u * pdf_L / (float)scene_info.lights_size;
         direct_ray.r_u *= segment.r_u * pdf_B;
 
         direct_isect.LTE *= T_ray / (direct_ray.r_l + direct_ray.r_u);
@@ -981,32 +977,8 @@ MediumEvent sampleMediumEvent(float pAbsorb, float pScatter, float pNull, float 
 
 // This returns Tr
 inline __host__ __device__
-//glm::vec3 Sample_channel(
-//    int path_index,
-//    int mediumIndex,
-//    int max_depth,
-//    Medium* media,
-//    int media_size,
-//    PathSegment* pathSegments,
-//    Material* materials,
-//    ShadeableIntersection& isect,
-//    MediumInteraction* mi,
-//    Geom* geoms,
-//    int geoms_size,
-//    Tri* tris,
-//    MISLightRay* direct_light_rays,
-//    MISLightIntersection* direct_light_isects,
-//    Light* lights,
-//    int num_lights,
-//    LBVHNode* lbvh,
-//    const nanovdb::NanoGrid<float>* media_density,
-//    GuiParameters& gui_params,
-//    thrust::default_random_engine& rng,
-//    thrust::uniform_real_distribution<float>& u01,
-//    bool& scattered)
 glm::vec3 Sample_channel(
     int path_index,
-    int max_depth,
     int mediumIndex,
     PathSegment& segment,
     ShadeableIntersection& isect,
@@ -1016,14 +988,12 @@ glm::vec3 Sample_channel(
     Tri* tris,
     Light* lights,
     Medium* media,
-    int geoms_size,
-    int num_lights,
-    int media_size,
     Material* materials,
     MediumInteraction* mi,
     LBVHNode* lbvh,
     const nanovdb::NanoGrid<float>* media_density,
     GuiParameters& gui_params,
+    SceneInfo& scene_info,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01,
     bool& scattered)
@@ -1121,8 +1091,8 @@ glm::vec3 Sample_channel(
                     // Direct light sampling
                     if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
                         // Direct light sampling
-                        glm::vec3 Ld = directLightSample(path_index, true, segment, materials, isect, geoms, geoms_size, tris,
-                          media, media_size, media_density, direct_light_ray, direct_light_isect, lights, num_lights, lbvh, gui_params, rng, u01);
+                        glm::vec3 Ld = directLightSample(path_index, true, segment, materials, isect, geoms, tris,
+                          media, media_density, direct_light_ray, direct_light_isect, lights, lbvh, gui_params, scene_info, rng, u01);
 
                         segment.accumulatedIrradiance += segment.rayThroughput * Ld;
                     }
