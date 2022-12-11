@@ -30,12 +30,12 @@
 #define ENABLE_SQUAREPLANES
 
 #define BOUNCE_PADDING 128
+//#define STREAM_COMPACTION
+//#define MEDIUM_SORT
 
 #define INV_PI 0.31831f
 #define INV_PI2 0.159155f
 #define INV_PI4 0.079577f
-
-
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn_FullVol(msg, FILENAME, __LINE__)
@@ -59,6 +59,18 @@ void checkCUDAErrorFn_FullVol(const char* msg, const char* file, int line) {
 #endif
 }
 
+//PerformanceTimer& timer()
+//{
+//	static PerformanceTimer timer;
+//	return timer;
+//}
+//
+//template<typename T>
+//void printElapsedTime(T time, std::string note = "")
+//{
+//	std::cout << "   elapsed time: " << time << "ms    " << note << std::endl;
+//}
+
 __host__ __device__
 thrust::default_random_engine makeSeededRandomEngine_FullVol(int iter, int index, int depth) {
 	int h = utilhash((1 << 31) | (depth << 22) | iter) ^ utilhash(index);
@@ -74,7 +86,6 @@ static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 static LBVHNode* dev_lbvh = NULL;
-static BVHNode_GPU* dev_bvh_nodes = NULL;
 static Medium* dev_media = NULL;
 static nanovdb::NanoGrid<float>* dev_media_density = NULL;
 //cudaStream_t media_stream;
@@ -89,7 +100,6 @@ static glm::vec3* dev_sample_colors = NULL;
 
 int pixelcount_fullvol;
 
-// TODO: remove these when done testing
 __global__ void grid_test_kernel_FullVol(const nanovdb::NanoGrid<float>* deviceGrid)
 {
 	if (threadIdx.x > 6)
@@ -126,9 +136,6 @@ void fullVolPathtraceInit(Scene* scene) {
 
 	cudaMalloc(&dev_lbvh, scene->lbvh.size() * sizeof(LBVHNode));
 	cudaMemcpy(dev_lbvh, scene->lbvh.data(), scene->lbvh.size() * sizeof(LBVHNode), cudaMemcpyHostToDevice);
-	
-	cudaMalloc(&dev_bvh_nodes, scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU));
-	cudaMemcpy(dev_bvh_nodes, scene->bvh_nodes_gpu.data(), scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU), cudaMemcpyHostToDevice);
 
 	cudaMalloc(&dev_lights, scene->lights.size() * sizeof(Light));
 	cudaMemcpy(dev_lights, scene->lights.data(), scene->lights.size() * sizeof(Light), cudaMemcpyHostToDevice);
@@ -173,10 +180,8 @@ void fullVolPathtraceFree() {
 	cudaFree(dev_geoms);
 	cudaFree(dev_tris);
 	cudaFree(dev_lbvh);
-	cudaFree(dev_bvh_nodes);
 	cudaFree(dev_materials);
 	cudaFree(dev_intersections);
-	// TODO: clean up any extra device memory you created
 	cudaFree(dev_lights);
 	cudaFree(dev_direct_light_rays);
 	cudaFree(dev_direct_light_isects);
@@ -244,7 +249,7 @@ __global__ void generateRayFromThinLensCamera_FullVol(Camera cam, int iter, int 
 		float jittered_x = ((float)x) + jitterX;
 		float jittered_y = ((float)y) + jitterY;
 
-		// TODO: implement antialiasing by jittering the ray
+		// Add antialiasing by jittering the ray
 		segment.ray.direction = glm::normalize(
 			glm::normalize(newRef - thinLensCamOrigin) - cam.right * cam.pixelLength.x * (jittered_x - (float)cam.resolution.x * 0.5f)
 			- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
@@ -280,7 +285,6 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
-		segment.prev_event_was_real = true;
 		segment.medium = cam.medium;
 		//segment.rgbWavelength = pickRGBWavelength(upixel(segment.rng_engine));
 		segment.rgbWavelength = 0;
@@ -317,29 +321,24 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		}
 
 		segment.ray.direction_inv = 1.0f / segment.ray.direction;
-		segment.lastRealRay = segment.ray;
-
+		segment.pixelIndex = index;
 		segment.remainingBounces = traceDepth;
-		segment.realPathLength = 0;
 
 		pathSegments[index] = mat[threadIdx.x][threadIdx.y];
 	}
 }
 
 __global__ void computeIntersections_FullVol(
-	int depth
-	, int num_paths
-	, int max_depth
+	int num_paths
+	, int depth
 	, PathSegment* pathSegments
 	, Geom* geoms
-	, int geoms_size
 	, Tri* tris
 	, Medium* media
-	, int media_size
 	, ShadeableIntersection* intersections
 	, LBVHNode* lbvh
+	, SceneInfo scene_info
 	, Light* lights
-	, int num_lights
 	, glm::vec3* env_map
 	, float* env_map_distribution
 	, int env_map_width
@@ -364,7 +363,7 @@ __global__ void computeIntersections_FullVol(
 		glm::vec3 tmp_normal;
 		int obj_ID = -1;
 
-		for (int i = 0; i < geoms_size; ++i)
+		for (int i = 0; i < scene_info.geoms_size; ++i)
 		{
 			Geom& geom = geoms[i];
 
@@ -410,8 +409,8 @@ __global__ void computeIntersections_FullVol(
 			
 		}
 
-		if (media_size > 0) {
-			for (int j = 0; j < media_size; j++) {
+		if (scene_info.media_size > 0) {
+			for (int j = 0; j < scene_info.media_size; j++) {
 				if (media[j].type == HOMOGENEOUS) continue;
 
 				const Medium& medium = media[j];
@@ -501,65 +500,72 @@ __global__ void computeIntersections_FullVol(
 
 __global__ void sampleParticipatingMedium_FullVol(
 	int num_paths,
-	int max_depth,
 	int depth,
 	PathSegment* pathSegments,
 	Material* materials,
 	ShadeableIntersection* intersections,
 	Geom* geoms,
-	int geoms_size,
 	Tri* tris,
 	Medium* media,
-	int media_size,
+	const nanovdb::NanoGrid<float>* media_density,
 	MISLightRay* direct_light_rays,
 	MISLightIntersection* direct_light_isects,
 	Light* lights,
-	int num_lights,
 	LBVHNode* lbvh,
+	GuiParameters gui_params,
+	SceneInfo scene_info,
 	glm::vec3* env_map,
 	float* env_map_distribution,
 	int env_map_width,
 	int env_map_height,
-	float env_map_dist_sum,
-	const nanovdb::NanoGrid<float>* media_density,
-	GuiParameters gui_params)
+	float env_map_dist_sum)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
 	{
-		if (pathSegments[idx].remainingBounces <= 0) {
+		PathSegment& segment = pathSegments[idx];
+		if (segment.remainingBounces <= 0) {
 			return;
 		}
 
-		thrust::default_random_engine& rng = pathSegments[idx].rng_engine;
+		thrust::default_random_engine& rng = segment.rng_engine;
 		thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 
 		// If we have a medium, sample participating medium
-		int rayMediumIndex = pathSegments[idx].medium;
+		int rayMediumIndex = segment.medium;
 		MediumInteraction mi;
 		mi.medium = -1;
 		glm::vec3 T_maj;
 		bool scattered = false;
 		if (rayMediumIndex >= 0) {
 			if (media[rayMediumIndex].type == HOMOGENEOUS) {
-				pathSegments[idx].rayThroughput *= Sample_homogeneous(media[rayMediumIndex], pathSegments[idx], intersections[idx], &mi, rayMediumIndex, u01(rng));
+				segment.rayThroughput *= Sample_homogeneous(media[rayMediumIndex], segment, intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
-				T_maj = Sample_channel(idx, rayMediumIndex, max_depth, media, media_size, pathSegments, materials, intersections[idx], &mi, geoms, geoms_size, tris,
-					direct_light_rays, direct_light_isects, lights, num_lights, lbvh, env_map,
-					env_map_distribution,
+				T_maj = Sample_channel(
+					idx,
+					rayMediumIndex, 
+					pathSegments[idx], 
+					intersections[idx], 
+					direct_light_rays[idx], 
+					direct_light_isects[idx], 
+					geoms, tris, lights, media, 
+					materials, &mi, lbvh, media_density,
+          env_map,
+          env_map_distribution,
 					env_map_width,
 					env_map_height,
-					env_map_dist_sum, media_density, gui_params, rng, u01, scattered);
+					env_map_dist_sum,
+					gui_params, scene_info, rng, u01, scattered);
 			}
 		}
-		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {
-			pathSegments[idx].remainingBounces = 0;
+		if (glm::length(segment.rayThroughput) <= 0.0f) {
+			segment.remainingBounces = 0;
 			return;
 		}
 		intersections[idx].mi = mi;
 
-		if (pathSegments[idx].remainingBounces <= 0) {
+		if (segment.remainingBounces <= 0) {
 			return;
 		}
 
@@ -568,37 +574,34 @@ __global__ void sampleParticipatingMedium_FullVol(
 		}
 
 		if (rayMediumIndex >= 0) {
-			pathSegments[idx].rayThroughput *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
-			pathSegments[idx].r_l *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
-			pathSegments[idx].r_u *= T_maj / T_maj[pathSegments[idx].rgbWavelength];
+			segment.rayThroughput *= T_maj / T_maj[segment.rgbWavelength];
+			segment.r_l *= T_maj / T_maj[segment.rgbWavelength];
+			segment.r_u *= T_maj / T_maj[segment.rgbWavelength];
 		}
 	}
 }
 
 __global__ void handleSurfaceInteraction_FullVol(
 	int num_paths,
-	int max_depth,
 	int depth,
 	PathSegment* pathSegments,
 	Material* materials,
 	ShadeableIntersection* intersections,
 	Geom* geoms,
-	int geoms_size,
 	Tri* tris,
 	Medium* media,
-	int media_size,
+	const nanovdb::NanoGrid<float>* media_density,
 	MISLightRay* direct_light_rays,
 	MISLightIntersection* direct_light_isects,
 	Light* lights,
-	int num_lights,
 	LBVHNode* lbvh,
+	GuiParameters gui_params,
+	SceneInfo scene_info,
 	glm::vec3* env_map,
 	float* env_map_distribution,
 	int env_map_width,
 	int env_map_height,
-	float env_map_dist_sum,
-	const nanovdb::NanoGrid<float>* media_density,
-	GuiParameters gui_params)
+	float env_map_dist_sum)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
@@ -623,8 +626,7 @@ __global__ void handleSurfaceInteraction_FullVol(
 			pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + ((intersection.t + 0.001f) * pathSegments[idx].ray.direction);
 			//pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside : intersection.mediumInterface.inside;
 
-			// TODO make work for both volume trypes
-			//if (glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > -0.01f && glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) < 0.01f) pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+			// TODO: make work for both volume types
 			pathSegments[idx].medium = insideMedium(pathSegments[idx], intersection.tMin, intersection.tMax, 0) ? intersection.mediumInterface.inside : intersection.mediumInterface.outside;
 
 			//pathSegments[idx].remainingBounces--;
@@ -636,18 +638,17 @@ __global__ void handleSurfaceInteraction_FullVol(
 
 		// Hit a light
 		if (material.emittance > 0.0f) {
-			if (pathSegments[idx].remainingBounces == max_depth || pathSegments[idx].prev_hit_was_specular) {
+			if (pathSegments[idx].remainingBounces == gui_params.max_depth || pathSegments[idx].prev_hit_was_specular) {
 				// only color lights on first hit
 				pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pathSegments[idx].r_u;
 			}
 			else {
-				//pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
 				if (glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction)) > 0.0001f) {
 
 				}
 				else {
 					int light_ID = -1;
-					for (int light_iter = 0; light_iter < num_lights; light_iter++) {
+					for (int light_iter = 0; light_iter < scene_info.lights_size; light_iter++) {
 						if (lights[light_iter].geom_ID == intersection.objID) {
 							light_ID = light_iter;
 							break;
@@ -655,12 +656,11 @@ __global__ void handleSurfaceInteraction_FullVol(
 					}
 					float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
 					float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
-					pdf_L *= (1.0f / (float)num_lights);
-
+					pdf_L *= (1.0f / (float)scene_info.lights_size);
 					if (gui_params.importance_sampling == UNI) {
-						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pdf_L;
+						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
 					}
-					else if (gui_params.importance_sampling == NEE) {
+					else if (gui_params.importance_sampling == UNI_NEE_MIS) {
 						pathSegments[idx].r_l *= pdf_L;
 						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
 					}
@@ -675,12 +675,14 @@ __global__ void handleSurfaceInteraction_FullVol(
 		if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
 		  if (!pathSegments[idx].prev_hit_was_specular) {
 
-			glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris,
-			  media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, env_map,
+			glm::vec3 Ld = directLightSample(idx, false, pathSegments[idx], materials, intersection, geoms, tris,
+			  media, media_density, direct_light_rays[idx], direct_light_isects[idx], lights, lbvh, 
+        env_map,
 				env_map_distribution,
 				env_map_width,
 				env_map_height,
-				env_map_dist_sum, gui_params, rng, u01);
+				env_map_dist_sum,
+        gui_params, scene_info, rng, u01);
 
 			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
@@ -739,7 +741,7 @@ __global__ void finalGather_FullVol(int nPaths, glm::vec3* image, PathSegment* i
 	if (index < nPaths)
 	{
 		PathSegment iterationPath = iterationPaths[index];
-		image[index] += iterationPath.accumulatedIrradiance;
+		image[iterationPath.pixelIndex] += iterationPath.accumulatedIrradiance;
 	}
 }
 
@@ -784,6 +786,15 @@ struct is_done
 	}
 };
 
+struct medium_sort
+{
+	__host__ __device__
+		bool operator()(const PathSegment& p0, const PathSegment& p1)
+	{
+		return p0.medium < p1.medium;
+	}
+};
+
 struct material_sort
 {
 	__host__ __device__
@@ -793,7 +804,7 @@ struct material_sort
 	}
 };
 
-void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params, int depth_padding, int refresh_rate, int refresh_bit) {
+void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_params, SceneInfo& scene_info) {
 
 	//std::cout << "============================== " << iter << " ==============================" << std::endl;
 
@@ -816,7 +827,6 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	//thrust::default_random_engine& rng = makeSeededRandomEngine_FullVol(iter, iter, traceDepth);
 	//thrust::uniform_real_distribution<float> u01(0.0f, 1.0f);
 	//int rgbWavelength = pickRGBWavelength(u01(rng));
-	////std::cout << "wavelength: " << rgbWavelength << std::endl;
 
 	// --- PathSegment Tracing Stage ---
 	// Shoot ray into scene, bounce between objects, push shading chunks
@@ -829,87 +839,103 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	generateRayFromCamera_FullVol << <blocksPerGrid2d, blockSize2d >> > (cam,
 		iter, traceDepth, dev_paths);
 
+	// sorting variables
+	PathSegment* dev_path_end = dev_paths + pixelcount_fullvol;
+	int num_paths = dev_path_end - dev_paths;
+	int compact_num_paths = num_paths;
+	thrust::device_ptr<PathSegment> dev_thrust_paths = thrust::device_pointer_cast(dev_paths);
+	thrust::device_ptr<ShadeableIntersection> dev_thrust_intersections = thrust::device_pointer_cast(dev_intersections);
+
 	while (!iterationComplete) {
-		//std::cout << "depth: " << depth << std::endl;
+		//std::cout << "DEPTH: " << depth << std::endl;
 		// When intersecting with primitive, determine if there is a medium transition or not
 		// Update isect struct's mediumInterface member variable with the appropriate mediumInterface
+		//timer().startGpuTimer();
 		computeIntersections_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
-			depth
-			, pixelcount_fullvol
-			, traceDepth
+			compact_num_paths
+			, depth
 			, dev_paths
 			, dev_geoms
-			, hst_scene->geoms.size()
 			, dev_tris
 			, dev_media
-			, hst_scene->media.size()
 			, dev_intersections
 			, dev_lbvh
+			, scene_info
 			, dev_lights
-			, hst_scene->lights.size()
 			, hst_scene->dev_environment_map
 			, hst_scene->dev_env_map_distribution
 			, hst_scene->env_map_width
 			, hst_scene->env_map_height
 			, hst_scene->env_map_dist_sum
-
 			);
+		//timer().endGpuTimer();
+		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Compute Intersections, CUDA Measured)");
+
+#ifdef MEDIUM_SORT
+		cudaDeviceSynchronize();
+#endif
 
 		depth++;
-		
+
+		// Sort paths by medium type
+#ifdef MEDIUM_SORT
+		dev_thrust_paths = thrust::device_pointer_cast(dev_paths);
+		thrust::sort_by_key(dev_thrust_paths, dev_thrust_paths + compact_num_paths, dev_intersections, medium_sort());
+#endif
+
 		// Attenuating ray throughput with medium stuff (phase function)
 		// Check if throughput is black, and break out of loop (set remainingBounces to 0)
 		// If medium interaction is valid, then sample light and pick new direction by sampling phase function distribution
 		// Else, handle surface interaction
+		//timer().startGpuTimer();
 		sampleParticipatingMedium_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
-			pixelcount_fullvol,
-			traceDepth,
+			compact_num_paths,
 			depth,
 			dev_paths,
 			dev_materials,
 			dev_intersections,
 			dev_geoms,
-			hst_scene->geoms.size(),
 			dev_tris,
 			dev_media,
-			hst_scene->media.size(),
+			dev_media_density,
 			dev_direct_light_rays,
 			dev_direct_light_isects,
 			dev_lights,
-			hst_scene->lights.size(),
 			dev_lbvh,
-			hst_scene->dev_environment_map,
+			gui_params,
+			scene_info,
+      hst_scene->dev_environment_map,
 			hst_scene->dev_env_map_distribution,
 			hst_scene->env_map_width,
 			hst_scene->env_map_height,
-			hst_scene->env_map_dist_sum,
-			dev_media_density,
-			gui_params);
+			hst_scene->env_map_dist_sum);
+		//timer().endGpuTimer();
+		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Sample Participating Medium, CUDA Measured)");
 
+		//timer().startGpuTimer();
 		handleSurfaceInteraction_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
-			pixelcount_fullvol,
-			traceDepth,
+			compact_num_paths,
 			depth,
 			dev_paths,
 			dev_materials,
 			dev_intersections,
 			dev_geoms,
-			hst_scene->geoms.size(),
 			dev_tris,
 			dev_media,
-			hst_scene->media.size(),
+			dev_media_density,
 			dev_direct_light_rays,
 			dev_direct_light_isects,
 			dev_lights,
-			hst_scene->lights.size(),
 			dev_lbvh,
-			hst_scene->dev_environment_map,
+			gui_params,
+			scene_info,
+      hst_scene->dev_environment_map,
 			hst_scene->dev_env_map_distribution,
 			hst_scene->env_map_width,
 			hst_scene->env_map_height,
-			hst_scene->env_map_dist_sum,
-			dev_media_density,
-			gui_params);
+			hst_scene->env_map_dist_sum);
+		//timer().endGpuTimer();
+		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Handle Surface Interactions, CUDA Measured)");
 		
 		// RUSSIAN ROULETTE
 		if (depth > 4)
@@ -921,7 +947,13 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 				);
 		}
 
-		if (depth == traceDepth + depth_padding) { iterationComplete = true; }
+#ifdef STREAM_COMPACTION
+		thrust::device_ptr<PathSegment> dev_thrust_path_end = thrust::stable_partition(dev_thrust_paths, dev_thrust_paths + compact_num_paths, is_done());
+		dev_path_end = dev_thrust_path_end.get();
+		compact_num_paths = dev_path_end - dev_paths;
+#endif
+
+		if (depth == traceDepth + gui_params.depth_padding || dev_paths == dev_path_end) { iterationComplete = true; }
 	}
 
 
@@ -929,7 +961,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 	finalGather_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (pixelcount_fullvol, dev_image, dev_paths);
 
 
-	if ((iter & refresh_rate) >> refresh_bit || iter < 2) {
+	if ((iter & gui_params.refresh_rate) >> gui_params.refresh_bit || iter < 2) {
 		// 	// Send results to OpenGL buffer for rendering
 		sendImageToPBO_FullVol << <blocksPerGrid2d, blockSize2d >> > (pbo, cam.resolution, iter, dev_image);
 

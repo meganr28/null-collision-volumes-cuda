@@ -84,13 +84,6 @@ struct Ray {
     glm::vec3 direction_inv;
 };
 
-struct TriBounds {
-    glm::vec3 AABB_min;
-    glm::vec3 AABB_max;
-    glm::vec3 AABB_centroid;
-    int tri_ID;
-};
-
 struct MortonCode {
     int objectId;
     unsigned int code;
@@ -115,40 +108,10 @@ struct LBVHNode {
     unsigned int right;
 };
 
-struct BVHNode {
-    glm::vec3 AABB_min;
-    glm::vec3 AABB_max;
-    BVHNode* child_nodes[2];
-    int split_axis;
-    int tri_index;
-};
-
-struct BVHNode_GPU {
-    glm::vec3 AABB_min;
-    glm::vec3 AABB_max;
-    int tri_index;
-    int offset_to_second_child;
-};
-
 struct Tri {
-    // positions
-    glm::vec3 p0;
-    glm::vec3 p1;
-    glm::vec3 p2;
-    // normals
-    glm::vec3 n0;
-    glm::vec3 n1;
-    glm::vec3 n2;
-    // uvs
-    glm::vec2 t0;
-    glm::vec2 t1;
-    glm::vec2 t2;
-    // array versions
     glm::vec3 verts[3];
     glm::vec3 norms[3];
-    // plane normal
     glm::vec3 plane_normal;
-    // centroid
     glm::vec3 centroid;
     float S;
     int objectId;
@@ -225,19 +188,17 @@ struct RenderState {
 
 struct PathSegment {
     Ray ray;
-    Ray lastRealRay;
     glm::vec3 accumulatedIrradiance;
     glm::vec3 rayThroughput;
     glm::vec3 r_u;
     glm::vec3 r_l;
     thrust::default_random_engine rng_engine;
+    int pixelIndex;
     int remainingBounces;
-    int realPathLength;
     int medium;
     int rgbWavelength;
     bool prev_hit_was_specular;
     bool prev_hit_null_material;
-    bool prev_event_was_real;
 };
 
 struct MISLightRay {
@@ -276,7 +237,6 @@ struct SceneInfo {
     int geoms_size;
     int media_size;
     int lights_size;
-    int pixel_count;
 };
 
 struct GuiParameters {

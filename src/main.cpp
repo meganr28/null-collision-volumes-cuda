@@ -78,7 +78,17 @@ int height;
 
 bool beginning = true;
 
+PerformanceTimer& timer()
+{
+	static PerformanceTimer timer;
+	return timer;
+}
 
+template<typename T>
+void printElapsedTime(T time, std::string note = "")
+{
+	std::cout << time << std::endl;
+}
 
 //-------------------------------
 //-------------MAIN--------------
@@ -346,6 +356,9 @@ void runCuda() {
 		ui_density_scale,
 		ui_importance_sampling };
 
+	// Initialize scene info
+	SceneInfo scene_info = { scene->geoms.size(), scene->media.size(), scene->lights.size() };
+
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
 	if (iteration == 0) {
@@ -369,7 +382,10 @@ void runCuda() {
 		int frame = 0;
 
 		if (ui_integrator == NULL_SCATTERING_MIS) {
-			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params, ui_depth_padding, refresh_rate, ui_refresh_bit);
+			timer().startGpuTimer();
+			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params, scene_info);
+			timer().endGpuTimer();
+			printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation());
 		}
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 			volPathtrace(pbo_dptr, frame, iteration, gui_params);

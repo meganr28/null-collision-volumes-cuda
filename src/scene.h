@@ -9,15 +9,6 @@
 #include "utilities.h"
 #include "sceneStructs.h"
 #include "image.h"
-//#include "C:/src/openvdb/openvdb/openvdb/tools/LevelSetSphere.h"
-//#include "openvdb/NanoVDB.h"
-//#include "openvdb/util/GridBuilder.h"
-//#include "openvdb/util/IO.h"
-//#include "openvdb/util/OpenToNanoVDB.h"
-//#include "openvdb/util/CudaDeviceBuffer.h"
-//#include "openvdb/util/Primitives.h"
-//#include "openvdb/util/SampleFromVoxels.h"
-//#include "openvdb/util/Ray.h"
 
 #include <openvdb/openvdb.h>
 #include <openvdb/tools/LevelSetSphere.h>
@@ -46,8 +37,6 @@ public:
     ~Scene();
 
     int loadOBJ(Geom& newGeom, int& geomTris, string filename, int objectid);
-    BVHNode* buildBVH(int start_index, int end_index);
-    void reformatBVHToGPU();
 
     int num_tris = 0;
 
@@ -72,11 +61,6 @@ public:
     std::vector<AABB> mesh_aabbs;
     int meshCount;
 
-    BVHNode* root_node;
-    int num_nodes = 0;
-
-    std::vector<BVHNode_GPU> bvh_nodes_gpu;
-    std::vector<TriBounds> tri_bounds;
     RenderState state;
 
     int environment_map_ID;

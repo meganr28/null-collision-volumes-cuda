@@ -71,7 +71,6 @@ static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 static LBVHNode* dev_lbvh = NULL;
-static BVHNode_GPU* dev_bvh_nodes = NULL;
 
 static MISLightRay* dev_direct_light_rays = NULL;
 static MISLightIntersection* dev_direct_light_isects = NULL;
@@ -106,9 +105,6 @@ void pathtraceInit(Scene* scene) {
 
 	cudaMalloc(&dev_lbvh, scene->lbvh.size() * sizeof(LBVHNode));
 	cudaMemcpy(dev_lbvh, scene->lbvh.data(), scene->lbvh.size() * sizeof(LBVHNode), cudaMemcpyHostToDevice);
-
-	cudaMalloc(&dev_bvh_nodes, scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU));
-	cudaMemcpy(dev_bvh_nodes, scene->bvh_nodes_gpu.data(), scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU), cudaMemcpyHostToDevice);
 
 	cudaMalloc(&dev_lights, scene->lights.size() * sizeof(Light));
 	cudaMemcpy(dev_lights, scene->lights.data(), scene->lights.size() * sizeof(Light), cudaMemcpyHostToDevice);
@@ -146,7 +142,6 @@ void pathtraceFree() {
 	cudaFree(dev_geoms);
 	cudaFree(dev_tris);
 	cudaFree(dev_lbvh);
-	cudaFree(dev_bvh_nodes);
 	cudaFree(dev_materials);
 	cudaFree(dev_intersections);
 	// TODO: clean up any extra device memory you created
@@ -239,7 +234,6 @@ __global__ void computeIntersections(
 	, int tris_size
 	, ShadeableIntersection* intersections
 	, LBVHNode* lbvh
-	, BVHNode_GPU* bvh_nodes
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -560,7 +554,6 @@ __global__ void computeDirectLightIsects(
 	, int tris_size
 	, MISLightIntersection* direct_light_intersections
 	, LBVHNode* lbvh
-	, BVHNode_GPU* bvh_nodes
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -636,7 +629,6 @@ __global__ void computeBSDFLightIsects(
 	, int tris_size
 	, MISLightIntersection* bsdf_light_intersections
 	, LBVHNode* lbvh
-	, BVHNode_GPU* bvh_nodes
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -935,7 +927,6 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 			, hst_scene->num_tris
 			, dev_intersections
 			, dev_lbvh
-			, dev_bvh_nodes
 			);
 
 		depth++;
@@ -967,7 +958,6 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 			, hst_scene->num_tris
 			, dev_direct_light_isects
 			, dev_lbvh
-			, dev_bvh_nodes
 			);
 
 		computeBSDFLightIsects << <numblocksPathSegmentTracing, blockSize1d >> > (
@@ -981,7 +971,6 @@ void pathtrace(uchar4* pbo, int frame, int iter) {
 			, hst_scene->num_tris
 			, dev_bsdf_light_isects
 			, dev_lbvh
-			, dev_bvh_nodes
 			);
 
 		shadeMaterialUberKernel << <numblocksPathSegmentTracing, blockSize1d >> > (
