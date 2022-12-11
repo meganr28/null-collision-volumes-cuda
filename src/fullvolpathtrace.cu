@@ -31,6 +31,10 @@
 
 #define BOUNCE_PADDING 128
 
+#define INV_PI 0.31831f
+#define INV_PI2 0.159155f
+#define INV_PI4 0.079577f
+
 
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -325,6 +329,7 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 __global__ void computeIntersections_FullVol(
 	int depth
 	, int num_paths
+	, int max_depth
 	, PathSegment* pathSegments
 	, Geom* geoms
 	, int geoms_size
@@ -333,6 +338,13 @@ __global__ void computeIntersections_FullVol(
 	, int media_size
 	, ShadeableIntersection* intersections
 	, LBVHNode* lbvh
+	, Light* lights
+	, int num_lights
+	, glm::vec3* env_map
+	, float* env_map_distribution
+	, int env_map_width
+	, int env_map_height
+	, float env_map_dist_sum
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -424,7 +436,61 @@ __global__ void computeIntersections_FullVol(
 
 		if (isect.t >= MAX_INTERSECT_DIST) {
 			// hits nothing
-			
+			if (env_map_width != 0) {
+				glm::vec3 w = glm::normalize(r.direction);
+
+				float phi = glm::atan(w.z, w.x);
+				if (phi < 0.0f) {
+					phi += TWO_PI;
+				}
+				float theta = glm::acos(w.y);
+				glm::vec2 st(1.0f - phi * INV_PI2, 1.0f - theta * INV_PI);
+				glm::vec2 pix(((float)(env_map_width) * st.x - 0.5f), (float)(env_map_height) * (1.0f - st.y) - 0.5f);
+
+				glm::vec3 env_map_color = env_map[env_map_width * (int)pix.y + (int)pix.x];
+				float env_map_pdf = env_map_distribution[env_map_width * (int)pix.y + (int)pix.x];
+				//env_map_color = glm::vec3(env_map_pdf, env_map_pdf, env_map_pdf);
+				//pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color * 5.0f;
+
+				// PBRT v3 version
+				/*if (pathSegments[path_index].remainingBounces == 0 || pathSegments[path_index].prev_hit_was_specular) {
+					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / pathSegments[path_index].r_u;
+				}
+				else {
+					float pdf_L = 0.0f;
+					float sinTheta = glm::sin(theta);
+
+					if (glm::abs(sinTheta) > 0.0f) {
+						float pdf_L = env_map_pdf / (env_map_dist_sum * (float)env_map_width * (float)env_map_height);
+
+						pdf_L *= 1.0f / (2 * PI * PI * sinTheta);
+						pdf_L *= 1.0f / (float)num_lights;
+						pathSegments[path_index].r_l *= pdf_L;
+						pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / (pathSegments[path_index].r_u + pathSegments[path_index].r_l);
+					}
+
+				}*/
+
+				if (pathSegments[path_index].remainingBounces == max_depth || pathSegments[path_index].prev_hit_was_specular) {
+					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / pathSegments[path_index].r_u;
+				}
+				else {
+					float pdf_L;
+
+					if (pathSegments[path_index].medium == -1) {
+						float absDot = glm::abs(glm::dot(intersections[path_index].surfaceNormal, r.direction));
+						pdf_L = absDot * 0.31831f;
+					}
+					else {
+						pdf_L = 1.0f / INV_PI4;
+					}
+
+					pdf_L *= 1.0f / (float)num_lights;
+					pathSegments[path_index].r_l *= pdf_L;
+					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / (pathSegments[path_index].r_u + pathSegments[path_index].r_l);
+				}
+
+			}
 			pathSegments[path_index].remainingBounces = 0;
 		}
 		else {
@@ -450,6 +516,11 @@ __global__ void sampleParticipatingMedium_FullVol(
 	Light* lights,
 	int num_lights,
 	LBVHNode* lbvh,
+	glm::vec3* env_map,
+	float* env_map_distribution,
+	int env_map_width,
+	int env_map_height,
+	float env_map_dist_sum,
 	const nanovdb::NanoGrid<float>* media_density,
 	GuiParameters gui_params)
 {
@@ -475,7 +546,11 @@ __global__ void sampleParticipatingMedium_FullVol(
 			}
 			else {
 				T_maj = Sample_channel(idx, rayMediumIndex, max_depth, media, media_size, pathSegments, materials, intersections[idx], &mi, geoms, geoms_size, tris,
-					direct_light_rays, direct_light_isects, lights, num_lights, lbvh, media_density, gui_params, rng, u01, scattered);
+					direct_light_rays, direct_light_isects, lights, num_lights, lbvh, env_map,
+					env_map_distribution,
+					env_map_width,
+					env_map_height,
+					env_map_dist_sum, media_density, gui_params, rng, u01, scattered);
 			}
 		}
 		if (glm::length(pathSegments[idx].rayThroughput) <= 0.0f) {
@@ -517,6 +592,11 @@ __global__ void handleSurfaceInteraction_FullVol(
 	Light* lights,
 	int num_lights,
 	LBVHNode* lbvh,
+	glm::vec3* env_map,
+	float* env_map_distribution,
+	int env_map_width,
+	int env_map_height,
+	float env_map_dist_sum,
 	const nanovdb::NanoGrid<float>* media_density,
 	GuiParameters gui_params)
 {
@@ -572,22 +652,18 @@ __global__ void handleSurfaceInteraction_FullVol(
 							light_ID = light_iter;
 							break;
 						}
-						float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
-						float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
-						pdf_L *= (1.0f / (float)num_lights);
-						if (gui_params.importance_sampling == UNI) {
-							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
-						}
-						else if (gui_params.importance_sampling == NEE) {
-							pathSegments[idx].r_l *= pdf_L;
-							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
-						}
 					}
 					float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
 					float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
 					pdf_L *= (1.0f / (float)num_lights);
-					pathSegments[idx].r_l *= pdf_L;
-					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+
+					if (gui_params.importance_sampling == UNI) {
+						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pdf_L;
+					}
+					else if (gui_params.importance_sampling == NEE) {
+						pathSegments[idx].r_l *= pdf_L;
+						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+					}
 				}
 			}
 			pathSegments[idx].remainingBounces = 0;
@@ -600,7 +676,11 @@ __global__ void handleSurfaceInteraction_FullVol(
 		  if (!pathSegments[idx].prev_hit_was_specular) {
 
 			glm::vec3 Ld = directLightSample(idx, false, pathSegments, materials, intersection, geoms, geoms_size, tris,
-			  media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
+			  media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, env_map,
+				env_map_distribution,
+				env_map_width,
+				env_map_height,
+				env_map_dist_sum, gui_params, rng, u01);
 
 			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
@@ -756,6 +836,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 		computeIntersections_FullVol << <numblocksPathSegmentTracing, blockSize1d >> > (
 			depth
 			, pixelcount_fullvol
+			, traceDepth
 			, dev_paths
 			, dev_geoms
 			, hst_scene->geoms.size()
@@ -764,6 +845,14 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			, hst_scene->media.size()
 			, dev_intersections
 			, dev_lbvh
+			, dev_lights
+			, hst_scene->lights.size()
+			, hst_scene->dev_environment_map
+			, hst_scene->dev_env_map_distribution
+			, hst_scene->env_map_width
+			, hst_scene->env_map_height
+			, hst_scene->env_map_dist_sum
+
 			);
 
 		depth++;
@@ -789,6 +878,11 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			dev_lights,
 			hst_scene->lights.size(),
 			dev_lbvh,
+			hst_scene->dev_environment_map,
+			hst_scene->dev_env_map_distribution,
+			hst_scene->env_map_width,
+			hst_scene->env_map_height,
+			hst_scene->env_map_dist_sum,
 			dev_media_density,
 			gui_params);
 
@@ -809,6 +903,11 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			dev_lights,
 			hst_scene->lights.size(),
 			dev_lbvh,
+			hst_scene->dev_environment_map,
+			hst_scene->dev_env_map_distribution,
+			hst_scene->env_map_width,
+			hst_scene->env_map_height,
+			hst_scene->env_map_dist_sum,
 			dev_media_density,
 			gui_params);
 		
