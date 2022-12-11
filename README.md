@@ -15,6 +15,8 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
   <img width="507" alt="mulit_color_cloud" src="https://user-images.githubusercontent.com/20704997/205739566-2ea7d4e6-6f81-41ea-a8db-1dccc50bc5a7.png">
 <p align="center"><em>Intel Cloud rendered with the null-scattering MIS framework</em></p>
 
+[Insert more pictures/gif/video here]
+
 **Physically-based volume rendering** is widely used in the entertainment and scientific engineering fields for rendering phenomena such as clouds, fog, smoke, and fire. This usually involves complex lighting computations, especially for volumes that vary spatially and spectrally. Production renderers leverage multiple importance sampling (MIS) to accelerate image synthesis for rendering surfaces. MIS techniques for volumes are unbiased only for homogeneous media. Therefore, we require a new technique to perform MIS for heterogeneous media. 
 
 The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz/publications/miller19null.html) (Miller et al. 2019) enables us to use MIS for any media and generalizes previous techniques such as ratio tracking, delta tracking, and spectral tracking. It analytically solves for the pdf of a light path during runtime, allowing us to combine several sampling techniques at once using MIS. Additionally, null-scattering introduces fictitious matter into the volume, which does not affect light transport, but instead allows us to "homogenize" the total density and analytically sample collisions. We implement the null-scattering formulation in **CUDA** and use **NanoVDB** for loading volumetric data. 
@@ -43,12 +45,29 @@ The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz
     * Debug and remove bias in null-scattering MIS renders (white pixels show up in renders)
     * Spectral MIS (with [hero wavelength sampling](https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/))
       
-### GUI Controls
+### Usage
 
-- Ray Depth - number of times light will bounce in each ray path
-- Absorption - amount of light absorbed while interacting with the medium (higher = darker)
-- Scattering - amount of light scattering inside of the medium (out-scattering and in-scattering)
-- Phase Asymmetry Factor - influences the direction of light scattering within the medium
+#### Rendering Controls
+
+- `Integrator`
+- `Importance Sampling`
+- `Max Ray Depth` - number of times light will bounce in each ray path
+- `Extra Depth Padding`
+- `Refresh Rate`
+
+#### Camera Controls
+
+- `FOV`
+- `Focal Distance`
+- `Lens Radius`
+
+#### Volumetric Controls
+
+- `Absorption` - amount of light absorbed while interacting with the medium (higher = darker)
+- `Scattering` - amount of light scattering inside of the medium (out-scattering and in-scattering)
+- `Asymmetry` - influences the direction of light scattering within the medium
+- `Density Offset`
+- `Density Scale`
 
 ### Build Instructions
 
@@ -101,69 +120,165 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 8. Include the appropriate header files in your project and see if you can build successfully. If not, check the OpenVDB site for [Troubleshooting tips](https://www.openvdb.org/documentation/doxygen/build.html#buildTroubleshooting). 
 9. Note that NanoVDB files are included in the `openvdb` directory that you cloned. 
 
-### Work-In-Progress Output
+### Concepts
 
-These are some visual results from our implementation so far. We began by implementing a renderer for homogeneous media, which we later extended to include heterogeneous media with delta tracking (also based on null collisions). Lastly, we implemented the null-scattering formulation described in the paper above. We have encountered a bug preventing correct convergence (note the difference between the delta tracking and null-scattering MIS renders), but are working actively to fix this. 
+#### Null-Scattering
 
-#### Homogeneous Media
+Include diagram with null particles here. 
 
-##### Environment Volume
+#### Null-Scattering MIS
 
-| "Underwater" Spheres |  Fog Caustic |
-:-------------------------:|:-------------------------:
-![](img/milestone_1/underwater.PNG)  |  ![](img/milestone_1/igjod.PNG)
+Explain unidirectional and next-event estimation. Also explain why path integral formulation gives us
+an advantage over previous methods (we can calculate pdf).
 
-##### Surface vs. Volume
+### Pipeline 
 
-| Pure Glass |  Pure Volume |
-:-------------------------:|:-------------------------:
-![](img/milestone_1/surface_no_volume_dense.PNG)  |  ![](img/milestone_1/no_surface_volume_dense.PNG)
+Include diagram of kernel layout. 
 
-##### Varying Phase Asymmetry 
+### Results
 
-| Forward Scattering (positive g) |  Back Scattering (negative g) |
-:-------------------------:|:-------------------------:
-![](img/milestone_1/positive_g.PNG)  |  ![](img/milestone_1/negative_g.PNG)
+#### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
-##### Varying Extinction (Absorption + Scattering) 
+Case where unidirectional performs better
 
-| Extinction Value  |      Result |
+| Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
+|:----------:    |:-------------:  |:-------------:  |
+| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  | ![](img/milestone_3/null_mis.PNG)
+
+Case where NEE performs better
+
+| Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
+|:----------:    |:-------------:  |:-------------:  |
+| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  | ![](img/milestone_3/null_mis.PNG)
+
+#### Varying Extinction (Absorption + Scattering) 
+
+##### Absorption
+
+Explain absorption and how changing it's value affects appearance.
+
+| Absorption Value  |      Absorption Value |      Absorption Value |      Absorption Value |
 |:----------:    |:-------------:  |
-| Low Extinction        |  ![](img/milestone_1/surface_volume_low_both.PNG)   | 
-| High Extinction       |  ![](img/milestone_1/surface_volume_high_both.PNG)   |
-| High Scattering       |  ![](img/milestone_1/surface_volume_high_scattering.PNG)   |
-| High Absorption       |  ![](img/milestone_1/surface_volume_high_absorption.PNG)   |
+| ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | ![](img/milestone_3/depth_2.PNG) | ![](img/milestone_3/depth_2.PNG)
 
-#### Heterogeneous Media with Delta Tracking
+##### Scattering
 
-| Scene  |      Result |
+Explain scattering and how changing it's value affects appearance.
+
+| Scattering Value  | Scattering Value | Scattering Value | Scattering Value |
 |:----------:    |:-------------:  |
-| OpenVDB Smoke 1                    |  ![](img/milestone_2/cool_vortices.PNG)   | 
-| Intel Cloud (low resolution)       |  ![](img/milestone_2/intel_cloud.PNG)   |
-| Intel Cloud (medium resolution)    |  ![](img/milestone_2/intel_cloud_2.PNG)   |
-| OpenVDB Smoke 2                    |  ![](img/milestone_2/smoke2.PNG)   |
+| ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | ![](img/milestone_3/depth_2.PNG) | ![](img/milestone_3/depth_2.PNG)
 
-#### Heterogeneous Media with Null-Scattering MIS
+#### Henyey-Greenstein Phase Asymmetry 
 
-| Delta Tracking  | Null-Scattering MIS (NEE + Unidirectional) |
+[Talk about forward and back-scattering and what phase asymmetry (g) controls]
+
+| Forward Scattering (g = ?) |   Back Scattering (g = ?) |
 |:----------:    |:-------------:  |
-| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  |
+| ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | 
+
+#### Density Interpolation
+
+Explain interpolation here.
+
+| No Interpolation |   Trilinear Interpolation |
+|:----------:    |:-------------:  |
+| ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | 
 
 ### Performance
 
-These are initial performance results from our null-scattering MIS implementation. Although there is a bug preventing correct convergence in our renders, we can still see how the null-scattering formulation accelerates runtime when compared to delta tracking. When increasing ray depth, we do observe an increase in render time. All renders were done at a resolution of 1024 x 1024 with 17000 iterations. 
+#### Testing Parameters
 
-#### Delta Tracking vs. Null Scattering MIS
+The following performance results were obtained using the following two scenes (unless otherwise noted). The smoke plume data can be found in [OpenVDB's repository](https://www.openvdb.org/).
 
-| Delta Tracking (26 ms/frame)  | Null-Scattering MIS (18 ms/frame)  |
+| Smoke in Empty Space  |   Smoke in Cornell Box |
 |:----------:    |:-------------:  |
-| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  |
+| ![](img/milestone_3/depth_2.PNG)      |  ![](img/milestone_3/depth_2.PNG)   | 
 
-#### Ray Depth
+The camera and lighting parameters are the same between the two scenes; the only difference is the setting in which we placed
+smoke plume. Unless otherwise noted, we used these additional parameters:
 
-| Depth  |      Result |
-|:----------:    |:-------------:  |
-| Depth 2  (14 ms/frame)      |  ![](img/milestone_3/depth_2.PNG)   | 
-| Depth 8  (22 ms/frame)      |  ![](img/milestone_3/depth_8.PNG)   |
-| Depth 32 (30 ms/frame)      |  ![](img/milestone_3/depth_32.PNG)   |
-| Depth 128 (60 ms/frame)     |  ![](img/milestone_3/depth_128.PNG)   |
+- `Absorption`: 0.02
+- `Scattering`: 0.2061
+- `Phase Asymmetry`: 0.001
+- `Iteration Count`: 20
+- `Ray Depth`: 1
+- `Resolution`: 800 x 800
+
+For testing, we turned GUI rendering off (this took about 20 ms of render time). We wrapped the call to our `fullVolPathtrace` function
+with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `endGpuTimer`. We recorded the average rendering time over 
+20 iterations. 
+
+#### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
+
+[Discussion here]
+
+| Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
+|:----------:    |:-------------:  |:-------------:  |
+| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  | ![](img/milestone_3/null_mis.PNG)
+
+[Graph here]
+
+![](img/milestone_3/null_mis.PNG)
+
+#### Varying Absorption, Scattering, and Phase Asymmetry
+
+[Discussion here]
+
+[Varying Absorption Graph Here]
+
+[Varying Scattering Graph Here]
+
+[Varying Phase Asymmetry Graph Here]
+
+#### Single Scattering vs. Multiple Scattering
+
+[Discussion here]
+
+[Graph Here]
+
+![](img/milestone_3/depth_2.PNG)
+
+#### Varying Max Density
+
+[Discussion here - taking smaller steps makes it take longer]
+
+[Graph Here]
+
+![](img/milestone_3/depth_2.PNG)
+
+#### Varying Scene Type (Box vs. Void)
+
+[Discussion here - how performance changes between scene types as you change bounce number]
+
+[Graph Here]
+
+![](img/milestone_3/depth_2.PNG)
+
+#### Other Optimizations
+
+[Mention stream compaction, medium sorting, reducing global memory reads, and parameter passing]
+
+### Future Work Directions
+
+
+
+### References
+
+- [A null-scattering path integral formulation of light transport](https://cs.dartmouth.edu/wjarosz/publications/miller19null.html) - Miller et al. 2019
+- [Dartmouth CS 87 Rendering Algorithms Course Notes](https://cs87-dartmouth.github.io/Fall2022/schedule.html) - Wojciech Jarosz
+- [Path Tracing in Production - Volumes](https://jo.dreggn.org/path-tracing-in-production/2019/christopher_kulla.pdf) - Christopher Kulla
+- [PBRT v3 Chapter 15 - Volumetric Light Transport](https://www.pbr-book.org/3ed-2018/Light_Transport_II_Volume_Rendering)
+- [PBRT v4](https://github.com/mmp/pbrt-v4)
+
+#### Volumetric Data
+
+- [Open/NanoVDB Repository](https://www.openvdb.org/) - Smoke Plumes, Cloud Bunny
+- [Intel Volumetric Clouds Library](https://dpel.aswf.io/intel-cloud-library/) - Intel Cloud
+- [Disney Cloud Dataset](https://disneyanimation.com/resources/clouds/) - Disney Cloud
+
+#### Thanks
+
+- Yining Karl Li
+- Bailey Miller
+- Wojciech Jarosz
