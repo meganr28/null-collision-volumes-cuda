@@ -11,9 +11,8 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
 
 ### Overview
 
-<p align="center">
-  <img width="507" alt="mulit_color_cloud" src="https://user-images.githubusercontent.com/20704997/205739566-2ea7d4e6-6f81-41ea-a8db-1dccc50bc5a7.png">
-<p align="center"><em>Intel Cloud rendered with the null-scattering MIS framework</em></p>
+![](img/final/final_renders/wdas_cloud_sunset.PNG)
+<p align="center"><em>WDAS Cloud rendered in a (procedural) sunset with null-scattering MIS framework</em></p>
 
 [Insert more pictures/gif/video here]
 
