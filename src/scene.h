@@ -81,6 +81,8 @@ public:
 
     int environment_map_ID;
     glm::vec3* dev_environment_map = NULL;
-    int env_map_width;
-    int env_map_height;
+    float* dev_env_map_distribution = NULL;
+    int env_map_width = 0;
+    int env_map_height = 0;
+    float env_map_dist_sum = 0.0f;
 };

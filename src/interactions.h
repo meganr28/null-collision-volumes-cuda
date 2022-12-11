@@ -9,6 +9,10 @@
 //#define USE_SCHLICK_APPROX
 #define EPSILON  0.00000001f
 
+#define INV_PI 0.31831f
+#define INV_PI2 0.159155f
+#define INV_PI4 0.079577f
+
 enum MediumEvent {
     ABSORB,
     REAL_SCATTER,
@@ -499,6 +503,53 @@ void Sample_Li(
     }
 }
 
+inline __host__ __device__
+glm::vec3 Sample_Li_EnvMap(
+    glm::vec3& wi,
+    float& pdf_L,
+    glm::vec3* env_map,
+    float* env_map_distribution,
+    int env_map_width,
+    int env_map_height,
+    float env_map_dist_sum,
+    PathSegment& segment,
+    ShadeableIntersection& intersection,
+    thrust::default_random_engine& rng,
+    thrust::uniform_real_distribution<float>& u01)
+{
+    if (segment.medium != 0) {
+        wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+        float absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+        pdf_L = absDot * 0.31831f;
+    }
+    else {
+        //wi = glm::normalize(calculateRandomDirectionInHemisphere(glm::normalize(segment.ray.direction), rng, u01));
+        //float absDot = glm::abs(glm::dot(glm::normalize(segment.ray.direction), wi));
+        //pdf_L = absDot * 0.31831f;
+        glm::vec2 rand_nums = glm::vec2(u01(rng), u01(rng));
+        glm::vec3 warped = glm::vec3(0, 0, 0);
+        warped.z = 1.0f - 2.0f * rand_nums[0];
+        float sqrtSample = glm::sqrt(1 - warped.z * warped.z);
+        warped.x = glm::cos(2.0f * M_PI * rand_nums[1]) * sqrtSample;
+        warped.y = glm::sin(2.0f * M_PI * rand_nums[1]) * sqrtSample;
+        wi = glm::normalize(warped);
+        pdf_L = 1.0f / INV_PI4;
+    }
+
+    
+    glm::vec3 w = glm::normalize(wi);
+
+    float phi = glm::atan(w.z, w.x);
+    if (phi < 0.0f) {
+        phi += TWO_PI;
+    }
+    float theta = glm::acos(w.y);
+    glm::vec2 st(1.0f - phi * INV_PI2, 1.0f - theta * INV_PI);
+    glm::vec2 pix(((float)(env_map_width)*st.x - 0.5f), (float)(env_map_height) * (1.0f - st.y) - 0.5f);
+
+   return env_map[env_map_width * (int)pix.y + (int)pix.x];
+}
+
 // function to randomly choose a light, randomly choose point on light, compute LTE with that random point, and generate ray for shadow casting
 inline __host__ __device__
 glm::vec3 computeDirectLightSamplePreVis(
@@ -810,7 +861,7 @@ glm::vec3 computeVisibility(
         }
         
         // if we did not intersect an object or intersected object is not a "invisible" bounding box, the ray is occluded
-        if (obj_ID == -1 || (obj_ID != -1 && obj_ID != r.light_ID && mat_id != -1)) {
+        if ((obj_ID == -1 && r.light_ID != -1) || (obj_ID != -1 && obj_ID != r.light_ID && mat_id != -1)) {
             num_iters++;
             return glm::vec3(0.0f);
         }
@@ -870,6 +921,11 @@ glm::vec3 directLightSample(
     Light* lights,
     int num_lights,
     LBVHNode* lbvh,
+    glm::vec3* env_map,
+    float* env_map_distribution,
+    int env_map_width,
+    int env_map_height,
+    float env_map_dist_sum,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01) 
@@ -880,15 +936,28 @@ glm::vec3 directLightSample(
         intersect_point = intersection.mi.samplePoint;
     }
 
-    // choose light to directly sample
-    direct_light_rays[idx].light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)num_lights)), num_lights - 1)].geom_ID;
-    Geom& light = geoms[direct_light_rays[idx].light_ID];
-    Material& light_material = materials[light.materialid];
-
-    // get light wi direction and pdf
     glm::vec3 wi = glm::vec3(0.0f);
     float pdf_L = 0.0f;
-    Sample_Li(light, intersect_point, wi, pdf_L, rng, u01);
+    Material light_material;
+
+    // choose light to directly sample
+    direct_light_rays[idx].light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)num_lights)), num_lights - 1)].geom_ID;
+
+    if (direct_light_rays[idx].light_ID == -1) {
+        // sample environment map
+
+        glm::vec3 env_color = Sample_Li_EnvMap(wi, pdf_L, env_map, env_map_distribution, env_map_width, env_map_height, env_map_dist_sum, pathSegments[idx], intersection, rng, u01);
+        light_material = { env_color, glm::vec3(0.0f), DIFFUSE_BRDF, 0.0f, 1.0f };
+    }
+    else {
+        // sample area light
+
+        Geom& light = geoms[direct_light_rays[idx].light_ID];
+        light_material = materials[light.materialid];
+
+        Sample_Li(light, intersect_point, wi, pdf_L, rng, u01);
+    }
+
 
     // store direct light ray information for visibility testing
     direct_light_rays[idx].ray.origin = intersect_point + (wi * 0.001f);
@@ -993,6 +1062,11 @@ glm::vec3 Sample_channel(
     Light* lights,
     int num_lights,
     LBVHNode* lbvh,
+    glm::vec3* env_map,
+    float* env_map_distribution,
+    int env_map_width,
+    int env_map_height,
+    float env_map_dist_sum,
     const nanovdb::NanoGrid<float>* media_density,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
@@ -1092,7 +1166,11 @@ glm::vec3 Sample_channel(
                     if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
                         // Direct light sampling
                         glm::vec3 Ld = directLightSample(path_index, true, pathSegments, materials, isect, geoms, geoms_size, tris,
-                          media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
+                          media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, env_map,
+                            env_map_distribution,
+                            env_map_width,
+                            env_map_height,
+                            env_map_dist_sum, gui_params, rng, u01);
 
                         pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * Ld;
                     }
@@ -1159,6 +1237,11 @@ bool handleMediumInteraction(
     Light* lights,
     int num_lights,
     LBVHNode* lbvh,
+    glm::vec3* env_map,
+    float* env_map_distribution,
+    int env_map_width,
+    int env_map_height,
+    float env_map_dist_sum,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
@@ -1227,7 +1310,11 @@ bool handleMediumInteraction(
             // Direct light sampling
             if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
                 glm::vec3 Ld = directLightSample(idx, true, pathSegments, materials, isect, geoms, geoms_size, tris,
-                  media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, gui_params, rng, u01);
+                  media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, lbvh, env_map,
+                    env_map_distribution,
+                    env_map_width,
+                    env_map_height,
+                    env_map_dist_sum, gui_params, rng, u01);
                   
                 pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
@@ -1259,3 +1346,57 @@ bool handleMediumInteraction(
         }       
     }
 }
+
+    /////////////////////////////////////////////////////////////////////////////////////////////////
+// 3D Worley Noise implementation
+
+inline __host__ __device__
+glm::vec3 random3D_to_3D_worley(glm::vec3 input_vals) {
+        return glm::fract(
+            glm::sin(
+                glm::vec3(
+                    glm::dot(
+                        input_vals, glm::vec3(194.38f, 598.45f, 638.345f)
+                    ),
+                    glm::dot(
+                        input_vals, glm::vec3(276.5f, 921.53f, 732.34f)
+                    ),
+                    glm::dot(
+                        input_vals, glm::vec3(129.63f, 690.69f, 403.35f)
+                    )
+                )
+            ) * 39483.3569f
+        );
+    }
+
+
+inline __host__ __device__
+float worley3D(glm::vec3 p, float freq) {
+        // scale input by freq to increase size of grid
+        p *= freq;
+
+        glm::vec3 p_floor = glm::floor(p);
+        glm::vec3 p_fract = glm::fract(p);
+        float min_d = 1.0f;
+
+        // look for closest voronoi centroid point in 3x3x3 grid around current position
+        for (int z = -1; z <= 1; ++z) {
+            for (int y = -1; y <= 1; ++y) {
+                for (int x = -1; x <= 1; ++x) {
+
+                    glm::vec3 this_neighbor = glm::vec3((float)x, (float)y, (float)z);
+
+                    // voronoi centroid
+                    glm::vec3 neighbor_point = random3D_to_3D_worley(p_floor + this_neighbor);
+
+                    glm::vec3 diff = this_neighbor + neighbor_point - p_fract;
+
+                    float d = glm::length(diff);
+
+                    min_d = glm::min(min_d, d);
+                }
+            }
+        }
+
+        return min_d;
+    }

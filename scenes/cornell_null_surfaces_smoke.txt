@@ -43,12 +43,12 @@ MEDIUM 0
 heterogeneous
 ../scenes/vdb/smoke.vdb
 ABSORPTION 0.02
-SCATTERING 0.01
+SCATTERING 0.2061
 ASYM_G     0.001
 
 // Camera
 CAMERA
-RES         400 400 
+RES         800 800 
 FOVY        19.5
 ITERATIONS  5000
 DEPTH       1
@@ -56,7 +56,7 @@ FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
 MEDIUM      -1
-EYE         0.0 45.5 75
+EYE         0.0 45.5 150
 LOOKAT      0 45 0
 UP          0 1 0
 
