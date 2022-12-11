@@ -143,13 +143,13 @@ Case where unidirectional performs better
 
 | Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
 |:----------:    |:-------------:  |:-------------:  |
-| ![](img/final/performance/uni_low_density_200iter.PNG) | ![](img/final/performance/nee_low_density_200iter.PNG)  | ![](img/final/performance/mis_low_density_200iter.PNG)
+| ![](img/final/performance/uni_low_density_200iter.PNG) | ![](img/final/performance/nee_low_density_200iter.PNG) | ![](img/final/performance/mis_low_density_200iter.PNG)
 
 Case where NEE performs better
 
 | Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
 |:----------:    |:-------------:  |:-------------:  |
-| ![](img/final/performance/uni_high_density_200iter.PNG) | ![](img/final/performance/nee_high_density_200iter.PNG)  | ![](img/final/performance/mis_high_density_200iter.PNG)
+| ![](img/final/performance/uni_high_density_200iter.PNG) | ![](img/final/performance/nee_high_density_200iter.PNG) | ![](img/final/performance/mis_high_density_200iter.PNG)
 
 #### Varying Extinction (Absorption + Scattering) 
 
@@ -159,7 +159,7 @@ Explain absorption and how changing it's value affects appearance.
 
 | Absorption Value  |      Absorption Value |      Absorption Value |      Absorption Value |
 |:----------:    |:-------------:  |:-------------:  |:-------------:  |
-| ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | ![](img/milestone_3/depth_2.PNG) | ![](img/milestone_3/depth_2.PNG)
+| ![](img/final/performance/parameters_converged/absorption/02_sca_1_ab_001_asy_1_den.PNG)  |  ![](img/final/performance/parameters_converged/absorption/02_sca_2_ab_001_asy_1_den.PNG)  | ![](img/final/performance/parameters_converged/absorption/02_sca_4_ab_001_asy_1_den.PNG) | ![](img/final/performance/parameters_converged/absorption/02_sca_8_ab_001_asy_1_den.PNG)
 
 ##### Scattering
 
@@ -167,7 +167,7 @@ Explain scattering and how changing it's value affects appearance.
 
 | Scattering Value  | Scattering Value | Scattering Value | Scattering Value |
 |:----------:    |:-------------:  |:-------------:  |:-------------:  |
-| ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | ![](img/milestone_3/depth_2.PNG) | ![](img/milestone_3/depth_2.PNG)
+| ![](img/final/performance/parameters_converged/scattering/1_sca_02_ab_001_asy_1_den.PNG)  |  ![](img/final/performance/parameters_converged/scattering/2_sca_02_ab_001_asy_1_den.PNG)  | ![](img/final/performance/parameters_converged/scattering/4_sca_02_ab_001_asy_1_den.PNG) | ![](img/final/performance/parameters_converged/scattering/8_sca_02_ab_001_asy_1_den.PNG)
 
 #### Henyey-Greenstein Phase Asymmetry 
 
@@ -213,37 +213,37 @@ with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `end
 
 [Discussion here - see above pictures for results]
 
-![](img/final/performance/graphs/mis_low_density.PNG)
+![](img/final/performance/graphs/mis_low_density.png)
 
-![](img/final/performance/graphs/mis_high_density.PNG)
+![](img/final/performance/graphs/mis_high_density.png)
 
 #### Varying Absorption, Scattering, and Phase Asymmetry
 
 [Discussion here]
 
-![](img/final/performance/graphs/absorption.PNG)
+![](img/final/performance/graphs/absorption.png)
 
-![](img/final/performance/graphs/scattering.PNG)
+![](img/final/performance/graphs/scattering.png)
 
-![](img/final/performance/graphs/asymmetry.PNG)
+![](img/final/performance/graphs/asymmetry.png)
 
 #### Single Scattering vs. Multiple Scattering
 
 [Discussion here]
 
-![](img/final/performance/graphs/max_depth.PNG)
+![](img/final/performance/graphs/max_depth.png)
 
 #### Varying Max Density
 
 [Discussion here - taking smaller steps makes it take longer]
 
-![](img/final/performance/graphs/max_density.PNG)
+![](img/final/performance/graphs/max_density.png)
 
 #### Varying Scene Type (Box vs. Void)
 
 [Discussion here - how performance changes between scene types as you change bounce number]
 
-![](img/final/performance/graphs/max_density.PNG)
+![](img/final/performance/graphs/max_density.png)
 
 #### Other Optimizations
 
