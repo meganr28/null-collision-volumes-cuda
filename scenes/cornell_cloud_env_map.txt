@@ -42,14 +42,14 @@ ENVMAP ../scenes/textures/environment_maps/Basketball_Court/BasketballCourt_3k.h
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/dustshockwave_0154.vdb
+../scenes/vdb/dustshockwave_0010.vdb
 ABSORPTION 0.01
 SCATTERING 0.1
 ASYM_G     0.001
 
 // Camera
 CAMERA
-RES         1920 1080
+RES         400 400
 FOVY        19.5
 ITERATIONS  5000
 DEPTH       2
@@ -57,8 +57,8 @@ FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
 MEDIUM      -1
-EYE         0.0 20.5 60
-LOOKAT      0 20 0
+EYE         0.0 60.5 60
+LOOKAT      0 60 0
 UP          0 1 0
 
 
