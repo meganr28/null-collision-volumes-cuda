@@ -399,7 +399,6 @@ glm::vec3 Sample_homogeneous(
     glm::vec3 density = sampleMedium ? (medium.sigma_t * Tr) : Tr;
   
     // TODO: change this to account for pdfs of other spectral wavelengths...
-    // QUESTION: is pdf calculation correct?
     float pdf = density[0];
 
     return sampleMedium ? (Tr * medium.sigma_s / pdf) : (Tr / pdf);
@@ -433,7 +432,6 @@ glm::vec3 Sample_heterogeneous(
     if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t, false)) {
         return glm::vec3(1.0f);
     }
-    //segment.accumulatedIrradiance += glm::vec3(100, 0, 0);
 
     // Run delta tracking to sample medium interaction
     t = glm::max(tMin, 0.0f);
@@ -457,8 +455,6 @@ glm::vec3 Sample_heterogeneous(
         if (segment.remainingBounces == 0) {
             return glm::vec3(1.0f);
         }*/
-        
-        
     }
 
     return glm::vec3(1.0f);
@@ -631,7 +627,6 @@ void getCoefficients(
         density = Density_heterogeneous(medium, media_density, localSamplePoint, segment);
     }
     density = (density + gui_params.density_offset) * gui_params.density_scale;
-    //if (density <= 0.0001f) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
     scattering = density * glm::vec3(gui_params.sigma_s);
     absorption = density * glm::vec3(gui_params.sigma_a);
     null = getMajorant(medium, gui_params) - (scattering + absorption);
@@ -738,10 +733,6 @@ glm::vec3 computeVisibility(
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
 {
-    //PathSegment& segment = pathSegments[idx];
-    //MISLightRay& direct_ray = direct_light_rays[idx];
-    //MISLightIntersection& direct_isect = direct_light_isects[idx];
-
     glm::vec3 T_ray = glm::vec3(1.0f);
 
     int num_iters = 0;
@@ -820,7 +811,6 @@ glm::vec3 computeVisibility(
                 T_ray *= Tr_homogeneous(media[direct_ray.medium], direct_ray.ray, t_min);
             }
             else {
-                //Tr *= Tr_heterogeneous(media[r.medium], pathSegments[idx], r, media_density, t_min, rng, u01);
                 glm::vec3 T_maj = Sample_channel_direct(idx, media[direct_ray.medium], segment, direct_isect, media_density, direct_ray, t_min, T_ray, gui_params, rng, u01);
                 T_ray *= T_maj / T_maj[segment.rgbWavelength];
                 direct_ray.r_l *= T_maj / T_maj[segment.rgbWavelength];
@@ -829,7 +819,6 @@ glm::vec3 computeVisibility(
         }
 
         if (glm::length(T_ray) < EPSILON) {
-            //pathSegments[idx].accumulatedIrradiance += glm::vec3(0.1, 0, 0);
             return glm::vec3(0.0f);
         }
 
@@ -871,10 +860,6 @@ glm::vec3 directLightSample(
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01) 
 {
-    //PathSegment& segment = pathSegments[idx];
-    //MISLightRay& direct_ray = direct_light_rays[idx];
-    //MISLightIntersection& direct_isect = direct_light_isects[idx];
-
     // calculate point on surface or medium from which the light ray should originate
     glm::vec3 intersect_point = segment.ray.origin + intersection.t * segment.ray.direction;
     if (intersection.mi.medium >= 0) {
@@ -963,12 +948,10 @@ glm::vec3 directLightSample(
 inline __host__ __device__
 MediumEvent sampleMediumEvent(float pAbsorb, float pScatter, float pNull, float rng_val) {
     if (pAbsorb > rng_val) {
-    //if (0.4f > rng_val) {
         return ABSORB;
     }
 
     if (pScatter + pAbsorb > rng_val) {
-    //if (0.7f > rng_val) {
         return REAL_SCATTER;
     }
 
@@ -998,7 +981,6 @@ glm::vec3 Sample_channel(
     thrust::uniform_real_distribution<float>& u01,
     bool& scattered)
 {
-    //PathSegment& segment = pathSegments[path_index];
     Ray worldRay = segment.ray;
 
     Ray localRay;

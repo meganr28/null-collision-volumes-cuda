@@ -82,7 +82,6 @@ static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 static LBVHNode* dev_lbvh = NULL;
-static BVHNode_GPU* dev_bvh_nodes = NULL;
 static Medium* dev_media = NULL;
 static nanovdb::NanoGrid<float>* dev_media_density = NULL;
 //cudaStream_t media_stream;
@@ -134,9 +133,6 @@ void fullVolPathtraceInit(Scene* scene) {
 
 	cudaMalloc(&dev_lbvh, scene->lbvh.size() * sizeof(LBVHNode));
 	cudaMemcpy(dev_lbvh, scene->lbvh.data(), scene->lbvh.size() * sizeof(LBVHNode), cudaMemcpyHostToDevice);
-	
-	cudaMalloc(&dev_bvh_nodes, scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU));
-	cudaMemcpy(dev_bvh_nodes, scene->bvh_nodes_gpu.data(), scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU), cudaMemcpyHostToDevice);
 
 	cudaMalloc(&dev_lights, scene->lights.size() * sizeof(Light));
 	cudaMemcpy(dev_lights, scene->lights.data(), scene->lights.size() * sizeof(Light), cudaMemcpyHostToDevice);
@@ -181,10 +177,8 @@ void fullVolPathtraceFree() {
 	cudaFree(dev_geoms);
 	cudaFree(dev_tris);
 	cudaFree(dev_lbvh);
-	cudaFree(dev_bvh_nodes);
 	cudaFree(dev_materials);
 	cudaFree(dev_intersections);
-	// TODO: clean up any extra device memory you created
 	cudaFree(dev_lights);
 	cudaFree(dev_direct_light_rays);
 	cudaFree(dev_direct_light_isects);
@@ -288,7 +282,6 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
-		segment.prev_event_was_real = true;
 		segment.medium = cam.medium;
 		//segment.rgbWavelength = pickRGBWavelength(upixel(segment.rng_engine));
 		segment.rgbWavelength = 0;
@@ -325,10 +318,8 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		}
 
 		segment.ray.direction_inv = 1.0f / segment.ray.direction;
-		segment.lastRealRay = segment.ray;
 		segment.pixelIndex = index;
 		segment.remainingBounces = traceDepth;
-		segment.realPathLength = 0;
 
 		pathSegments[index] = mat[threadIdx.x][threadIdx.y];
 	}
@@ -483,8 +474,6 @@ __global__ void sampleParticipatingMedium_FullVol(
 				segment.rayThroughput *= Sample_homogeneous(media[rayMediumIndex], segment, intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
-				//T_maj = Sample_channel(idx, rayMediumIndex, max_depth, media, media_size, pathSegments, materials, intersections[idx], &mi, geoms, geoms_size, tris,
-				//	direct_light_rays, direct_light_isects, lights, num_lights, lbvh, media_density, gui_params, rn u01, scattered);
 				T_maj = Sample_channel(
 					idx,
 					rayMediumIndex, 
@@ -493,7 +482,8 @@ __global__ void sampleParticipatingMedium_FullVol(
 					direct_light_rays[idx], 
 					direct_light_isects[idx], 
 					geoms, tris, lights, media, 
-					materials, &mi, lbvh, media_density, gui_params, scene_info, rng, u01, scattered);
+					materials, &mi, lbvh, media_density, 
+					gui_params, scene_info, rng, u01, scattered);
 			}
 		}
 		if (glm::length(segment.rayThroughput) <= 0.0f) {
@@ -558,8 +548,7 @@ __global__ void handleSurfaceInteraction_FullVol(
 			pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + ((intersection.t + 0.001f) * pathSegments[idx].ray.direction);
 			//pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside : intersection.mediumInterface.inside;
 
-			// TODO make work for both volume trypes
-			//if (glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > -0.01f && glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) < 0.01f) pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+			// TODO: make work for both volume types
 			pathSegments[idx].medium = insideMedium(pathSegments[idx], intersection.tMin, intersection.tMax, 0) ? intersection.mediumInterface.inside : intersection.mediumInterface.outside;
 
 			//pathSegments[idx].remainingBounces--;
@@ -576,7 +565,6 @@ __global__ void handleSurfaceInteraction_FullVol(
 				pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pathSegments[idx].r_u;
 			}
 			else {
-				//pathSegments[idx].accumulatedIrradiance += glm::vec3(1, 0, 0);
 				if (glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction)) > 0.0001f) {
 
 				}
@@ -587,22 +575,17 @@ __global__ void handleSurfaceInteraction_FullVol(
 							light_ID = light_iter;
 							break;
 						}
-						float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
-						float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
-						pdf_L *= (1.0f / (float)scene_info.lights_size);
-						if (gui_params.importance_sampling == UNI) {
-							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
-						}
-						else if (gui_params.importance_sampling == NEE) {
-							pathSegments[idx].r_l *= pdf_L;
-							pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
-						}
 					}
 					float dist = glm::length(pathSegments[idx].ray.origin - (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction));
 					float pdf_L = (intersection.t * intersection.t) / (glm::abs(glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction))) * geoms[intersection.objID].scale.x * geoms[intersection.objID].scale.y);
 					pdf_L *= (1.0f / (float)scene_info.lights_size);
-					pathSegments[idx].r_l *= pdf_L;
-					pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+					if (gui_params.importance_sampling == UNI) {
+						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
+					}
+					else if (gui_params.importance_sampling == UNI_NEE_MIS) {
+						pathSegments[idx].r_l *= pdf_L;
+						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+					}
 				}
 			}
 			pathSegments[idx].remainingBounces = 0;

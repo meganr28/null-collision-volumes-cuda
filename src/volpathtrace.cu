@@ -68,7 +68,6 @@ static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
 static LBVHNode* dev_lbvh = NULL;
-static BVHNode_GPU* dev_bvh_nodes = NULL;
 static Medium* dev_media = NULL;
 static nanovdb::NanoGrid<float>* dev_media_density = NULL;
 //cudaStream_t media_stream;
@@ -120,9 +119,6 @@ void volPathtraceInit(Scene* scene) {
 	
 	cudaMalloc(&dev_lbvh, scene->lbvh.size() * sizeof(LBVHNode));
 	cudaMemcpy(dev_lbvh, scene->lbvh.data(), scene->lbvh.size() * sizeof(LBVHNode), cudaMemcpyHostToDevice);
-	
-	cudaMalloc(&dev_bvh_nodes, scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU));
-	cudaMemcpy(dev_bvh_nodes, scene->bvh_nodes_gpu.data(), scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU), cudaMemcpyHostToDevice);
 
 	cudaMalloc(&dev_lights, scene->lights.size() * sizeof(Light));
 	cudaMemcpy(dev_lights, scene->lights.data(), scene->lights.size() * sizeof(Light), cudaMemcpyHostToDevice);
@@ -167,10 +163,8 @@ void volPathtraceFree() {
 	cudaFree(dev_geoms);
 	cudaFree(dev_tris);
 	cudaFree(dev_lbvh);
-	cudaFree(dev_bvh_nodes);
 	cudaFree(dev_materials);
 	cudaFree(dev_intersections);
-	// TODO: clean up any extra device memory you created
 	cudaFree(dev_lights);
 	cudaFree(dev_direct_light_rays);
 	cudaFree(dev_direct_light_isects);
@@ -267,7 +261,6 @@ __global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth,
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
-		segment.prev_event_was_real = true;
 		segment.medium = cam.medium;
 
 		float jitterX = upixel(segment.rng_engine);
@@ -302,10 +295,7 @@ __global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth,
 		}
 
 		segment.ray.direction_inv = 1.0f / segment.ray.direction;
-		segment.lastRealRay = segment.ray;
-
 		segment.remainingBounces = traceDepth;
-		segment.realPathLength = 0;
 
 		pathSegments[index] = mat[threadIdx.x][threadIdx.y];
 	}
@@ -323,7 +313,6 @@ __global__ void computeIntersections_Vol(
 	, int media_size
 	, ShadeableIntersection* intersections
 	, LBVHNode* lbvh
-	, BVHNode_GPU* bvh_nodes
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -410,7 +399,6 @@ __global__ void computeIntersections_Vol(
 		if (isect.t >= MAX_INTERSECT_DIST) {
 			// hits nothing
 			pathSegments[path_index].remainingBounces = 0;
-			//pathSegments[path_index].accumulatedIrradiance += glm::vec3(0.55, .65, 0.85);
 		}
 		else {
 			intersections[path_index] = isect;
@@ -598,7 +586,6 @@ __global__ void computeVisVolumetric(
 	, int media_size
 	, MISLightIntersection* direct_light_intersections
 	, LBVHNode* lbvh
-	, BVHNode_GPU* bvh_nodes
 	, const nanovdb::NanoGrid<float>* media_density
 	, GuiParameters gui_params
 	
@@ -810,8 +797,6 @@ __global__ void surfaceSpawnPathSegment(
 			return;
 		}
 
-		//pathSegments[idx].accumulatedIrradiance += glm::vec3(0, 0, 1);
-
 		ShadeableIntersection intersection = intersections[idx];
 		MISLightIntersection direct_light_intersection = direct_light_isects[idx];
 
@@ -835,7 +820,6 @@ __global__ void surfaceSpawnPathSegment(
 		pathSegments[idx].ray.direction = wi;
 		pathSegments[idx].ray.direction_inv = 1.0f / wi;
 		pathSegments[idx].ray.origin = intersect_point + (wi * 0.001f);
-		//pathSegments[idx].medium = intersection.mi.medium;
 		pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
 			intersection.mediumInterface.inside;
 		pathSegments[idx].remainingBounces--;
@@ -972,7 +956,6 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 			, hst_scene->media.size()
 			, dev_intersections
 			, dev_lbvh
-			, dev_bvh_nodes
 			);
 
 		depth++;
@@ -1029,7 +1012,6 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 			hst_scene->media.size(),
 			dev_direct_light_isects,
 			dev_lbvh,
-			dev_bvh_nodes,
 			dev_media_density,
 			gui_params
 			);
@@ -1056,14 +1038,14 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 			dev_media);
 		
 		// RUSSIAN ROULETTE
-		/*if (depth >= 5)
+		if (depth > 4)
 		{
 			russianRouletteKernel_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
 				iter,
 				pixelcount_vol,
 				dev_paths
 				);
-		}*/
+		}
 
 		if (depth == traceDepth) { iterationComplete = true; }
 	}
