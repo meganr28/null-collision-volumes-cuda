@@ -42,7 +42,7 @@ ENVMAP ../scenes/textures/environment_maps/Basketball_Court/BasketballCourt_3k.h
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/wdas_cloud_quarter.vdb
+../scenes/vdb/dustshockwave_0154.vdb
 ABSORPTION 0.01
 SCATTERING 0.1
 ASYM_G     0.001
@@ -61,14 +61,5 @@ EYE         0.0 20.5 60
 LOOKAT      0 20 0
 UP          0 1 0
 
-
-// Ceiling light
-OBJECT 0
-squareplane
-material 0
-mediuminterface -1 -1
-TRANS       0 360.9 400
-ROTAT       -215 0 0
-SCALE       3 3 1
 
 
