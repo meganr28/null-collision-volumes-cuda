@@ -33,6 +33,10 @@
 //#define STREAM_COMPACTION
 //#define MEDIUM_SORT
 
+#define INV_PI 0.31831f
+#define INV_PI2 0.159155f
+#define INV_PI4 0.079577f
+
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn_FullVol(msg, FILENAME, __LINE__)
 void checkCUDAErrorFn_FullVol(const char* msg, const char* file, int line) {
@@ -334,6 +338,12 @@ __global__ void computeIntersections_FullVol(
 	, ShadeableIntersection* intersections
 	, LBVHNode* lbvh
 	, SceneInfo scene_info
+	, Light* lights
+	, glm::vec3* env_map
+	, float* env_map_distribution
+	, int env_map_width
+	, int env_map_height
+	, float env_map_dist_sum
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -425,7 +435,61 @@ __global__ void computeIntersections_FullVol(
 
 		if (isect.t >= MAX_INTERSECT_DIST) {
 			// hits nothing
-			
+			if (env_map_width != 0) {
+				glm::vec3 w = glm::normalize(r.direction);
+
+				float phi = glm::atan(w.z, w.x);
+				if (phi < 0.0f) {
+					phi += TWO_PI;
+				}
+				float theta = glm::acos(w.y);
+				glm::vec2 st(1.0f - phi * INV_PI2, 1.0f - theta * INV_PI);
+				glm::vec2 pix(((float)(env_map_width) * st.x - 0.5f), (float)(env_map_height) * (1.0f - st.y) - 0.5f);
+
+				glm::vec3 env_map_color = env_map[env_map_width * (int)pix.y + (int)pix.x];
+				float env_map_pdf = env_map_distribution[env_map_width * (int)pix.y + (int)pix.x];
+				//env_map_color = glm::vec3(env_map_pdf, env_map_pdf, env_map_pdf);
+				//pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color * 5.0f;
+
+				// PBRT v3 version
+				/*if (pathSegments[path_index].remainingBounces == 0 || pathSegments[path_index].prev_hit_was_specular) {
+					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / pathSegments[path_index].r_u;
+				}
+				else {
+					float pdf_L = 0.0f;
+					float sinTheta = glm::sin(theta);
+
+					if (glm::abs(sinTheta) > 0.0f) {
+						float pdf_L = env_map_pdf / (env_map_dist_sum * (float)env_map_width * (float)env_map_height);
+
+						pdf_L *= 1.0f / (2 * PI * PI * sinTheta);
+						pdf_L *= 1.0f / (float)num_lights;
+						pathSegments[path_index].r_l *= pdf_L;
+						pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / (pathSegments[path_index].r_u + pathSegments[path_index].r_l);
+					}
+
+				}*/
+
+				if (pathSegments[path_index].remainingBounces == max_depth || pathSegments[path_index].prev_hit_was_specular) {
+					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / pathSegments[path_index].r_u;
+				}
+				else {
+					float pdf_L;
+
+					if (pathSegments[path_index].medium == -1) {
+						float absDot = glm::abs(glm::dot(intersections[path_index].surfaceNormal, r.direction));
+						pdf_L = absDot * 0.31831f;
+					}
+					else {
+						pdf_L = 1.0f / INV_PI4;
+					}
+
+					pdf_L *= 1.0f / (float)num_lights;
+					pathSegments[path_index].r_l *= pdf_L;
+					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / (pathSegments[path_index].r_u + pathSegments[path_index].r_l);
+				}
+
+			}
 			pathSegments[path_index].remainingBounces = 0;
 		}
 		else {
@@ -449,7 +513,12 @@ __global__ void sampleParticipatingMedium_FullVol(
 	Light* lights,
 	LBVHNode* lbvh,
 	GuiParameters gui_params,
-	SceneInfo scene_info)
+	SceneInfo scene_info,
+	glm::vec3* env_map,
+	float* env_map_distribution,
+	int env_map_width,
+	int env_map_height,
+	float env_map_dist_sum)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
@@ -481,7 +550,12 @@ __global__ void sampleParticipatingMedium_FullVol(
 					direct_light_rays[idx], 
 					direct_light_isects[idx], 
 					geoms, tris, lights, media, 
-					materials, &mi, lbvh, media_density, 
+					materials, &mi, lbvh, media_density,
+          env_map,
+          env_map_distribution,
+					env_map_width,
+					env_map_height,
+					env_map_dist_sum,
 					gui_params, scene_info, rng, u01, scattered);
 			}
 		}
@@ -522,7 +596,12 @@ __global__ void handleSurfaceInteraction_FullVol(
 	Light* lights,
 	LBVHNode* lbvh,
 	GuiParameters gui_params,
-	SceneInfo scene_info)
+	SceneInfo scene_info,
+	glm::vec3* env_map,
+	float* env_map_distribution,
+	int env_map_width,
+	int env_map_height,
+	float env_map_dist_sum)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < num_paths)
@@ -597,7 +676,13 @@ __global__ void handleSurfaceInteraction_FullVol(
 		  if (!pathSegments[idx].prev_hit_was_specular) {
 
 			glm::vec3 Ld = directLightSample(idx, false, pathSegments[idx], materials, intersection, geoms, tris,
-			  media, media_density, direct_light_rays[idx], direct_light_isects[idx], lights, lbvh, gui_params, scene_info, rng, u01);
+			  media, media_density, direct_light_rays[idx], direct_light_isects[idx], lights, lbvh, 
+        env_map,
+				env_map_distribution,
+				env_map_width,
+				env_map_height,
+				env_map_dist_sum,
+        gui_params, scene_info, rng, u01);
 
 			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
 
@@ -776,6 +861,12 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			, dev_intersections
 			, dev_lbvh
 			, scene_info
+			, dev_lights
+			, hst_scene->dev_environment_map
+			, hst_scene->dev_env_map_distribution
+			, hst_scene->env_map_width
+			, hst_scene->env_map_height
+			, hst_scene->env_map_dist_sum
 			);
 		//timer().endGpuTimer();
 		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Compute Intersections, CUDA Measured)");
@@ -812,7 +903,12 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			dev_lights,
 			dev_lbvh,
 			gui_params,
-			scene_info);
+			scene_info,
+      hst_scene->dev_environment_map,
+			hst_scene->dev_env_map_distribution,
+			hst_scene->env_map_width,
+			hst_scene->env_map_height,
+			hst_scene->env_map_dist_sum);
 		//timer().endGpuTimer();
 		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Sample Participating Medium, CUDA Measured)");
 
@@ -832,7 +928,12 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			dev_lights,
 			dev_lbvh,
 			gui_params,
-			scene_info);
+			scene_info,
+      hst_scene->dev_environment_map,
+			hst_scene->dev_env_map_distribution,
+			hst_scene->env_map_width,
+			hst_scene->env_map_height,
+			hst_scene->env_map_dist_sum);
 		//timer().endGpuTimer();
 		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Handle Surface Interactions, CUDA Measured)");
 		

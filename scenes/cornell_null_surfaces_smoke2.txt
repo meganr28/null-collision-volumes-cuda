@@ -1,26 +1,26 @@
 // Emissive material (light)
 MATERIAL 		0
-R_COLOR        	1 1 1
+R_COLOR        	2 2 6
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	10
+EMITTANCE   	6
 
 // Diffuse white
-MATERIAL 1
-R_COLOR         0.27 0.55 0.85
+MATERIAL 		1
+R_COLOR        	6 2 2
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	0
+EMITTANCE   	6
 
 // Diffuse red
 MATERIAL 2
-R_COLOR         0.63 0.065 0.05
+R_COLOR        	2 6 2
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	0
+EMITTANCE   	6
 
 // Diffuse green
 MATERIAL 3
@@ -41,14 +41,14 @@ EMITTANCE   	0
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/smoke2.vdb
+../scenes/vdb/wdas_cloud.vdb
 ABSORPTION 0.01
 SCATTERING 0.1
 ASYM_G     0.001
 
 // Camera
 CAMERA
-RES         1024 1024
+RES         1920 1080
 FOVY        19.5
 ITERATIONS  5000
 DEPTH       1
@@ -56,8 +56,8 @@ FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
 MEDIUM      -1
-EYE         0.0 20.5 75
-LOOKAT      0 20 0
+EYE         0.0 70.5 75
+LOOKAT      0 70 0
 UP          0 1 0
 
 
@@ -66,60 +66,24 @@ OBJECT 0
 squareplane
 material 0
 mediuminterface -1 -1
-TRANS       0 60.9 0
-ROTAT       90 0 0
-SCALE       30 30 1
+TRANS       0 360.9 400
+ROTAT       -215 0 0
+SCALE       300 300 1
 
-// Floor
+// Ceiling light
 OBJECT 1
 squareplane
 material 1
 mediuminterface -1 -1
-TRANS       0 -5 0
-ROTAT       270 0 0
-SCALE       60 60 60
+TRANS       0 360.9 -400
+ROTAT       35 0 0
+SCALE       300 300 1
 
-// Ceiling
+// Ceiling light
 OBJECT 2
-squareplane
-material 1
-mediuminterface -1 -1
-TRANS       0 61 0
-ROTAT       90 0 0
-SCALE       60 60 60
-
-// Back wall
-OBJECT 3
-squareplane
-material 1
-mediuminterface -1 -1
-TRANS       0 25 -30
-ROTAT       0 0 0
-SCALE       60 72 60
-
-// Left wall
-OBJECT 4
 squareplane
 material 2
 mediuminterface -1 -1
-TRANS       -26 25 0
-ROTAT       0 90 0
-SCALE       60 72 60
-
-// Right wall
-OBJECT 5
-squareplane
-material 3
-mediuminterface -1 -1
-TRANS       26 25 0
-ROTAT       0 270 0
-SCALE       60 72 60
-
-// front wall
-OBJECT 6
-squareplane
-material 1
-mediuminterface -1 -1
-TRANS       0 25 30
-ROTAT       180 0 0
-SCALE       60 72 60
+TRANS       0 360.9 0
+ROTAT       90 0 0
+SCALE       300 300 1
