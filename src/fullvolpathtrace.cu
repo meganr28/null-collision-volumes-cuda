@@ -344,6 +344,7 @@ __global__ void computeIntersections_FullVol(
 	, int env_map_width
 	, int env_map_height
 	, float env_map_dist_sum
+	, GuiParameters& gui_params
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -470,7 +471,7 @@ __global__ void computeIntersections_FullVol(
 
 				}*/
 
-				if (pathSegments[path_index].remainingBounces == max_depth || pathSegments[path_index].prev_hit_was_specular) {
+				if (pathSegments[path_index].remainingBounces == gui_params.max_depth || pathSegments[path_index].prev_hit_was_specular) {
 					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / pathSegments[path_index].r_u;
 				}
 				else {
@@ -484,7 +485,7 @@ __global__ void computeIntersections_FullVol(
 						pdf_L = 1.0f / INV_PI4;
 					}
 
-					pdf_L *= 1.0f / (float)num_lights;
+					pdf_L *= 1.0f / (float)scene_info.lights_size;
 					pathSegments[path_index].r_l *= pdf_L;
 					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / (pathSegments[path_index].r_u + pathSegments[path_index].r_l);
 				}
@@ -551,8 +552,8 @@ __global__ void sampleParticipatingMedium_FullVol(
 					direct_light_isects[idx], 
 					geoms, tris, lights, media, 
 					materials, &mi, lbvh, media_density,
-          env_map,
-          env_map_distribution,
+					env_map,
+					env_map_distribution,
 					env_map_width,
 					env_map_height,
 					env_map_dist_sum,
@@ -867,6 +868,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			, hst_scene->env_map_width
 			, hst_scene->env_map_height
 			, hst_scene->env_map_dist_sum
+			, gui_params
 			);
 		//timer().endGpuTimer();
 		//printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation(), "(Compute Intersections, CUDA Measured)");
@@ -904,7 +906,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			dev_lbvh,
 			gui_params,
 			scene_info,
-      hst_scene->dev_environment_map,
+			hst_scene->dev_environment_map,
 			hst_scene->dev_env_map_distribution,
 			hst_scene->env_map_width,
 			hst_scene->env_map_height,
@@ -929,7 +931,7 @@ void fullVolPathtrace(uchar4* pbo, int frame, int iter, GuiParameters& gui_param
 			dev_lbvh,
 			gui_params,
 			scene_info,
-      hst_scene->dev_environment_map,
+			hst_scene->dev_environment_map,
 			hst_scene->dev_env_map_distribution,
 			hst_scene->env_map_width,
 			hst_scene->env_map_height,

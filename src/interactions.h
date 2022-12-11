@@ -851,7 +851,7 @@ glm::vec3 computeVisibility(
         }
         
         // if we did not intersect an object or intersected object is not a "invisible" bounding box, the ray is occluded
-        if (obj_ID == -1 && direct_ray.light_ID != -1) || (obj_ID != -1 && obj_ID != direct_ray.light_ID && mat_id != -1)) {
+        if ((obj_ID == -1 && direct_ray.light_ID != -1) || (obj_ID != -1 && obj_ID != direct_ray.light_ID && mat_id != -1)) {
             num_iters++;
             return glm::vec3(0.0f);
         }
@@ -1043,12 +1043,12 @@ glm::vec3 Sample_channel(
     Material* materials,
     MediumInteraction* mi,
     LBVHNode* lbvh,
+    const nanovdb::NanoGrid<float>* media_density,
     glm::vec3* env_map,
     float* env_map_distribution,
     int env_map_width,
     int env_map_height,
     float env_map_dist_sum,
-    const nanovdb::NanoGrid<float>* media_density,
     GuiParameters& gui_params,
     SceneInfo& scene_info,
     thrust::default_random_engine& rng,
