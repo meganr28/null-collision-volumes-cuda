@@ -143,13 +143,13 @@ Case where unidirectional performs better
 
 | Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
 |:----------:    |:-------------:  |:-------------:  |
-| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  | ![](img/milestone_3/null_mis.PNG)
+| ![](img/final/performance/uni_low_density_200iter.PNG) | ![](img/final/performance/nee_low_density_200iter.PNG)  | ![](img/final/performance/mis_low_density_200iter.PNG)
 
 Case where NEE performs better
 
 | Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
 |:----------:    |:-------------:  |:-------------:  |
-| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  | ![](img/milestone_3/null_mis.PNG)
+| ![](img/final/performance/uni_high_density_200iter.PNG) | ![](img/final/performance/nee_high_density_200iter.PNG)  | ![](img/final/performance/mis_high_density_200iter.PNG)
 
 #### Varying Extinction (Absorption + Scattering) 
 
@@ -158,7 +158,7 @@ Case where NEE performs better
 Explain absorption and how changing it's value affects appearance.
 
 | Absorption Value  |      Absorption Value |      Absorption Value |      Absorption Value |
-|:----------:    |:-------------:  |
+|:----------:    |:-------------:  |:-------------:  |:-------------:  |
 | ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | ![](img/milestone_3/depth_2.PNG) | ![](img/milestone_3/depth_2.PNG)
 
 ##### Scattering
@@ -166,7 +166,7 @@ Explain absorption and how changing it's value affects appearance.
 Explain scattering and how changing it's value affects appearance.
 
 | Scattering Value  | Scattering Value | Scattering Value | Scattering Value |
-|:----------:    |:-------------:  |
+|:----------:    |:-------------:  |:-------------:  |:-------------:  |
 | ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | ![](img/milestone_3/depth_2.PNG) | ![](img/milestone_3/depth_2.PNG)
 
 #### Henyey-Greenstein Phase Asymmetry 
@@ -211,49 +211,39 @@ with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `end
 
 #### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
-[Discussion here]
+[Discussion here - see above pictures for results]
 
-| Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
-|:----------:    |:-------------:  |:-------------:  |
-| ![](img/milestone_3/delta.PNG) | ![](img/milestone_3/null_mis.PNG)  | ![](img/milestone_3/null_mis.PNG)
+![](img/final/performance/graphs/mis_low_density.PNG)
 
-[Graph here]
-
-![](img/milestone_3/null_mis.PNG)
+![](img/final/performance/graphs/mis_high_density.PNG)
 
 #### Varying Absorption, Scattering, and Phase Asymmetry
 
 [Discussion here]
 
-[Varying Absorption Graph Here]
+![](img/final/performance/graphs/absorption.PNG)
 
-[Varying Scattering Graph Here]
+![](img/final/performance/graphs/scattering.PNG)
 
-[Varying Phase Asymmetry Graph Here]
+![](img/final/performance/graphs/asymmetry.PNG)
 
 #### Single Scattering vs. Multiple Scattering
 
 [Discussion here]
 
-[Graph Here]
-
-![](img/milestone_3/depth_2.PNG)
+![](img/final/performance/graphs/max_depth.PNG)
 
 #### Varying Max Density
 
 [Discussion here - taking smaller steps makes it take longer]
 
-[Graph Here]
-
-![](img/milestone_3/depth_2.PNG)
+![](img/final/performance/graphs/max_density.PNG)
 
 #### Varying Scene Type (Box vs. Void)
 
 [Discussion here - how performance changes between scene types as you change bounce number]
 
-[Graph Here]
-
-![](img/milestone_3/depth_2.PNG)
+![](img/final/performance/graphs/max_density.PNG)
 
 #### Other Optimizations
 
