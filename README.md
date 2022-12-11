@@ -137,6 +137,12 @@ Include diagram of kernel layout.
 
 ### Results
 
+#### Loading Volumetric Data with NanoVDB
+
+| VDB 1  | VDB 2 | VDB 3
+|:----------:    |:-------------:  |:-------------:  |
+| ![](img/final/performance/uni_low_density_200iter.PNG) | ![](img/final/performance/nee_low_density_200iter.PNG) | ![](img/final/performance/mis_low_density_200iter.PNG)
+
 #### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
 Case where unidirectional performs better
@@ -185,23 +191,11 @@ Explain density and how changing it's value affects appearance.
 |:----------:    |:-------------:  |:-------------:  |
 | ![](img/final/performance/parameters_converged/asymmetry/2_sca_2_ab_001_asy_1_den.PNG)  |  ![](img/final/performance/parameters_converged/asymmetry/2_sca_2_ab_8_asy_1_den.PNG)  | ![](img/final/performance/parameters_converged/asymmetry/2_sca_2_ab_neg8_asy_1_den.PNG)
 
-#### Density Interpolation
-
-Explain interpolation here.
-
-| No Interpolation |   Trilinear Interpolation |
-|:----------:    |:-------------:  |
-| ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | 
-
 ### Performance
 
 #### Testing Parameters
 
-The following performance results were obtained using the following two scenes (unless otherwise noted). The smoke plume data can be found in [OpenVDB's repository](https://www.openvdb.org/).
-
-| Smoke in Empty Space  |   Smoke in Cornell Box |
-|:----------:    |:-------------:  |
-| ![](img/milestone_3/depth_2.PNG)      |  ![](img/milestone_3/depth_2.PNG)   | 
+The following performance results were obtained 
 
 The camera and lighting parameters are the same between the two scenes; the only difference is the setting in which we placed
 smoke plume. Unless otherwise noted, we used these additional parameters:
@@ -227,39 +221,80 @@ with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `end
 
 #### Varying Absorption, Scattering, and Phase Asymmetry
 
-[Discussion here]
+Figure XX below showcases the impact of varying the absorption, scattering, and
+ph
 
 ![](img/final/performance/graphs/absorption.png)
 
+Figure XX below showcases the impact of varying the absorption, scattering, and
+ph
+
 ![](img/final/performance/graphs/scattering.png)
+
+Figure XX below showcases the impact of varying the absorption, scattering, and
+ph
 
 ![](img/final/performance/graphs/asymmetry.png)
 
 #### Single Scattering vs. Multiple Scattering
 
-[Discussion here]
+Figure XX below showcases the impact of increasing the maximum allowed bounces that can 
+occur within a medium when a scattering event takes place. This increases the runtime in a similar way
+that increasing the maximum ray depth in a surface path tracer will, except in this
+cases all of the additional depth is spent inside the same volume.
 
 ![](img/final/performance/graphs/max_depth.png)
 
 #### Varying Max Density
 
-[Discussion here - taking smaller steps makes it take longer]
+Figure XX below showcases the impact of artificially augmenting the max density by some constant amount.
+This means that this test doesn't change the actualy density data in the vdb grid, but instead
+scales the calculated max density of the grid up. Doing this will still yield a physically correct
+result, however will dramatically increase the runtime. This is because the max density
+is used to calculate the majorant for the vdb volumetric grid, and this majorant is what determines
+the rate of interaction sampling within the medium. Increasing this max density value will
+thus increase the amount of marching through the volume the integrator is performing, because
+more steps of smaller distances are being performed.
 
 ![](img/final/performance/graphs/max_density.png)
 
 #### Varying Scene Type (Box vs. Void)
 
-[Discussion here - how performance changes between scene types as you change bounce number]
+Figure XX below showcases the impact of having participating media and surfaces interact within
+a scene. While the lighting benefits of the global illumination showcase a much more realistic
+looking smoke cloud, the performance impact is much worse. This is because, in the scene
+with nothing but a single area light, most of the rays either end when cast directly from the camera,
+or end as soon as they escape the bouding box of the participating medium. However, in the
+scene with the smoke surrounded on all sides by surfaces, all rays that bounce on the walls will
+potentially enter the medium at subsequent bounces, and rays that leave the medium will then
+go on to interact with the walls. This means that adding an additional maximum ray depth means
+more multiple scattering in indirect lighting passes, which is realistic, but definitely a performance
+hit. Future work could entail seperating the amount of multiple scattering within volumes from
+the global illumination of the surfaces in the scene.
 
-![](img/final/performance/graphs/max_density.png)
+![](img/final/performance/graphs/box_vs_no_box.png)
 
 #### Other Optimizations
 
-[Mention stream compaction, medium sorting, reducing global memory reads, and parameter passing]
+We tried a few optimization strategies to speed up our volume renderer. One idea was to use stream compaction 
+to remove terminated rays after each bounce. Another strategy was to sort the rays by their medium type, where rays
+heading into a medium and those not heading into a medium will be grouped together. The intention was to ensure that 
+similar rays would follow similar branches in the code, thus creating coherency and speeding up the code. Unfortunately,
+neither of these strategies seemed to help and instead decreased performance. 
+
+Some minor optimizations we made were reducing the number of global memory reads and the number of parameters being passed
+into each kernel. Once we removed some of our unused parameters and consolidated some of the others, we gained a small performance boost. 
+Our `sampleParticipatingMedium` and `handleSurfaceInteraction` kernels are faster by 2 ms with these changes.
 
 ### Future Work Directions
 
+There are many interesting ways to extend this project and several features that we would like to implement in a future iteration of this work:
 
+- Spectral rendering
+- Spectral MIS
+- Subsurface scattering
+- Bidirectional path tracing
+- Further Optimization
 
 ### References
 
@@ -274,9 +309,13 @@ with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `end
 - [Open/NanoVDB Repository](https://www.openvdb.org/) - Smoke Plumes, Cloud Bunny
 - [Intel Volumetric Clouds Library](https://dpel.aswf.io/intel-cloud-library/) - Intel Cloud
 - [Disney Cloud Dataset](https://disneyanimation.com/resources/clouds/) - Disney Cloud
+- [JangaFX Free VDB Animations](https://jangafx.com/software/embergen/download/free-vdb-animations/)
 
-#### Thanks
+#### Acknowledgements
+
+We would like to thank the following individuals for their help and support throughout this project:
 
 - Yining Karl Li
 - Bailey Miller
 - Wojciech Jarosz
+- Adam Mally
