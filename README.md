@@ -157,7 +157,7 @@ Case where NEE performs better
 
 Explain absorption and how changing it's value affects appearance.
 
-| Absorption Value  |      Absorption Value |      Absorption Value |      Absorption Value |
+| sigma_a = 0.1  |  sigma_a = 0.2 | sigma_a = 0.4 | sigma_a = 0.8 |
 |:----------:    |:-------------:  |:-------------:  |:-------------:  |
 | ![](img/final/performance/parameters_converged/absorption/02_sca_1_ab_001_asy_1_den.PNG)  |  ![](img/final/performance/parameters_converged/absorption/02_sca_2_ab_001_asy_1_den.PNG)  | ![](img/final/performance/parameters_converged/absorption/02_sca_4_ab_001_asy_1_den.PNG) | ![](img/final/performance/parameters_converged/absorption/02_sca_8_ab_001_asy_1_den.PNG)
 
@@ -165,17 +165,25 @@ Explain absorption and how changing it's value affects appearance.
 
 Explain scattering and how changing it's value affects appearance.
 
-| Scattering Value  | Scattering Value | Scattering Value | Scattering Value |
+| sigma_s = 0.1  | sigma_s = 0.2 | sigma_s = 0.4 | sigma_s = 0.8 |
 |:----------:    |:-------------:  |:-------------:  |:-------------:  |
 | ![](img/final/performance/parameters_converged/scattering/1_sca_02_ab_001_asy_1_den.PNG)  |  ![](img/final/performance/parameters_converged/scattering/2_sca_02_ab_001_asy_1_den.PNG)  | ![](img/final/performance/parameters_converged/scattering/4_sca_02_ab_001_asy_1_den.PNG) | ![](img/final/performance/parameters_converged/scattering/8_sca_02_ab_001_asy_1_den.PNG)
+
+##### Density
+
+Explain density and how changing it's value affects appearance.
+
+| 1x  | 5x | 10x | 30x |
+|:----------:    |:-------------:  |:-------------:  |:-------------:  |
+| ![](img/final/performance/parameters_converged/density/2_sca_02_ab_001_asy_1_den.PNG)  |  ![](img/final/performance/parameters_converged/density/2_sca_02_ab_001_asy_5_den.PNG)  | ![](img/final/performance/parameters_converged/density/2_sca_02_ab_001_asy_10_den.PNG) | ![](img/final/performance/parameters_converged/density/2_sca_02_ab_001_asy_30_den.PNG)
 
 #### Henyey-Greenstein Phase Asymmetry 
 
 [Talk about forward and back-scattering and what phase asymmetry (g) controls]
 
-| Forward Scattering (g = ?) |   Back Scattering (g = ?) |
-|:----------:    |:-------------:  |
-| ![](img/milestone_3/depth_2.PNG)  |  ![](img/milestone_3/depth_2.PNG)  | 
+| Back Scattering (g = -0.8) |   Equal Scattering (g = 0.001) |   Forward Scattering (g = 0.8) |
+|:----------:    |:-------------:  |:-------------:  |
+| ![](img/final/performance/parameters_converged/asymmetry/2_sca_2_ab_001_asy_1_den.PNG)  |  ![](img/final/performance/parameters_converged/asymmetry/2_sca_2_ab_8_asy_1_den.PNG)  | ![](img/final/performance/parameters_converged/asymmetry/2_sca_2_ab_neg8_asy_1_den.PNG)
 
 #### Density Interpolation
 
