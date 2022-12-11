@@ -55,17 +55,17 @@ void checkCUDAErrorFn_FullVol(const char* msg, const char* file, int line) {
 #endif
 }
 
-PerformanceTimer& timer()
-{
-	static PerformanceTimer timer;
-	return timer;
-}
-
-template<typename T>
-void printElapsedTime(T time, std::string note = "")
-{
-	std::cout << "   elapsed time: " << time << "ms    " << note << std::endl;
-}
+//PerformanceTimer& timer()
+//{
+//	static PerformanceTimer timer;
+//	return timer;
+//}
+//
+//template<typename T>
+//void printElapsedTime(T time, std::string note = "")
+//{
+//	std::cout << "   elapsed time: " << time << "ms    " << note << std::endl;
+//}
 
 __host__ __device__
 thrust::default_random_engine makeSeededRandomEngine_FullVol(int iter, int index, int depth) {
@@ -96,7 +96,6 @@ static glm::vec3* dev_sample_colors = NULL;
 
 int pixelcount_fullvol;
 
-// TODO: remove these when done testing
 __global__ void grid_test_kernel_FullVol(const nanovdb::NanoGrid<float>* deviceGrid)
 {
 	if (threadIdx.x > 6)
@@ -246,7 +245,7 @@ __global__ void generateRayFromThinLensCamera_FullVol(Camera cam, int iter, int 
 		float jittered_x = ((float)x) + jitterX;
 		float jittered_y = ((float)y) + jitterY;
 
-		// TODO: implement antialiasing by jittering the ray
+		// Add antialiasing by jittering the ray
 		segment.ray.direction = glm::normalize(
 			glm::normalize(newRef - thinLensCamOrigin) - cam.right * cam.pixelLength.x * (jittered_x - (float)cam.resolution.x * 0.5f)
 			- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)

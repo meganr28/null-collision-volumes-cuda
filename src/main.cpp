@@ -78,7 +78,17 @@ int height;
 
 bool beginning = true;
 
+PerformanceTimer& timer()
+{
+	static PerformanceTimer timer;
+	return timer;
+}
 
+template<typename T>
+void printElapsedTime(T time, std::string note = "")
+{
+	std::cout << time << std::endl;
+}
 
 //-------------------------------
 //-------------MAIN--------------
@@ -372,7 +382,10 @@ void runCuda() {
 		int frame = 0;
 
 		if (ui_integrator == NULL_SCATTERING_MIS) {
+			timer().startGpuTimer();
 			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params, scene_info);
+			timer().endGpuTimer();
+			printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation());
 		}
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 			volPathtrace(pbo_dptr, frame, iteration, gui_params);
