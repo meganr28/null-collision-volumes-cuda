@@ -1,10 +1,10 @@
 // Emissive material (light)
 MATERIAL 		0
-R_COLOR        	10 8 6
+R_COLOR        	10 6 3
 T_COLOR     	0 0 0
 DIFFUSE_BRDF
 IOR    			0
-EMITTANCE   	10
+EMITTANCE   	25
 
 // Diffuse white
 MATERIAL 1
@@ -42,16 +42,16 @@ EMITTANCE   	0
 MEDIUM 0
 heterogeneous
 ../scenes/vdb/smoke.vdb
-ABSORPTION 0.02
-SCATTERING 0.2061
+ABSORPTION 0.002
+SCATTERING 0.0061
 ASYM_G     0.001
 
 // Camera
 CAMERA
 RES         800 800 
 FOVY        19.5
-ITERATIONS  21
-DEPTH       1
+ITERATIONS  200
+DEPTH       2
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0
@@ -66,6 +66,6 @@ OBJECT 0
 squareplane
 material 0
 mediuminterface -1 -1
-TRANS       0 135.9 0
-ROTAT       90 0 0
+TRANS       -150 124.9 0
+ROTAT       90 45 0
 SCALE       30 30 1
