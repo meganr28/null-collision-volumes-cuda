@@ -138,8 +138,7 @@ Include diagram with null particles here.
 
 #### Null-Scattering MIS
 
-Explain unidirectional and next-event estimation. Also explain why path integral formulation gives us
-an advantage over previous methods (we can calculate pdf).
+Explain unidirectional and next-event estimation. Also explain why path integral formulation gives us an advantage over previous methods (we can calculate pdf).
 
 ### Pipeline 
 
@@ -151,12 +150,17 @@ an advantage over previous methods (we can calculate pdf).
 
 #### Loading Volumetric Data with NanoVDB
 
-| VDB 1  | VDB 2 | VDB 3
+We use NanoVDB for loading and parsing volumetric data. NanoVDB is developed by NVIDIA and adds GPU acceleration support to OpenVDB. Since we did not use `.nvdb` files (the type supported by NanoVDB), we also
+had to build OpenVDB to convert `.vdb` files to `.nvdb` for loading density grids. By itself, however, NanoVDB does not depend on OpenVDB. In the following images, we have rendered a few different `.vdb` files.
+
+| Cloud Bunny (OpenVDB)  | Smoke (OpenVDB) | Torus (EmberGen)
 |:----------:    |:-------------:  |:-------------:  |
-| ![](img/final/performance/uni_low_density_200iter.PNG) | ![](img/final/performance/nee_low_density_200iter.PNG) | ![](img/final/performance/mis_low_density_200iter.PNG)
+| ![](img/final/performance/parameters_converged/vdb_loading/bunny.PNG) | ![](img/final/performance/parameters_converged/vdb_loading/smoke.PNG) | ![](img/final/performance/parameters_converged/vdb_loading/torus.PNG)
 
 #### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
+To verify that our null-scattering framework was working as expected, we followed the same lighting setups described in the paper.
+ 
 Case where unidirectional performs better
 
 | Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
@@ -341,7 +345,7 @@ There are many interesting ways to extend this project and several features that
 
 We would like to thank the following individuals for their help and support throughout this project:
 
-- Yining Karl Li
-- Bailey Miller
-- Wojciech Jarosz
-- Adam Mally
+- **Yining Karl Li** for discussing initial project ideas with us and pointing us to helpful resources about state-of-the-art physically-based rendering techniques and null-scattering volumes
+- **Bailey Miller** for answering initial questions we had about the project, providing implementation tips, and pointing us to notable reference implementations
+- **Wojciech Jarosz** for providing answers to conceptual questions we had during implementation
+- **Adam Mally** for providing us with a strong foundation in physically-based rendering in UPenn CIS 561
