@@ -1201,55 +1201,21 @@ glm::vec3 Sample_channel(
     }
 }
 
-// 3D Worley Noise implementation
-
-inline __host__ __device__
-glm::vec3 random3D_to_3D_worley(glm::vec3 input_vals) {
-        return glm::fract(
-            glm::sin(
-                glm::vec3(
-                    glm::dot(
-                        input_vals, glm::vec3(194.38f, 598.45f, 638.345f)
-                    ),
-                    glm::dot(
-                        input_vals, glm::vec3(276.5f, 921.53f, 732.34f)
-                    ),
-                    glm::dot(
-                        input_vals, glm::vec3(129.63f, 690.69f, 403.35f)
-                    )
-                )
-            ) * 39483.3569f
-        );
-    }
 
 
 inline __host__ __device__
-float worley3D(glm::vec3 p, float freq) {
-        // scale input by freq to increase size of grid
-        p *= freq;
+glm::vec3 sunsetGradient(glm::vec3 wi) {
+    wi = glm::normalize(wi);
+    float t = (wi.y + 1.0f) * 0.5;
+    t *= 0.5f;
 
-        glm::vec3 p_floor = glm::floor(p);
-        glm::vec3 p_fract = glm::fract(p);
-        float min_d = 1.0f;
 
-        // look for closest voronoi centroid point in 3x3x3 grid around current position
-        for (int z = -1; z <= 1; ++z) {
-            for (int y = -1; y <= 1; ++y) {
-                for (int x = -1; x <= 1; ++x) {
+    glm::vec3 a(1.138f, 0.508f, 0.618f);
+    glm::vec3 b(0.428f, 0.018f, 0.208f);
+    glm::vec3 c(1.568f, 0.718f, 1.898f);
+    glm::vec3 d(-0.852f, -0.222f, 0.558f);
+    return (a + b * glm::cos(6.28318f * (c * t + d))) * 0.75f;
 
-                    glm::vec3 this_neighbor = glm::vec3((float)x, (float)y, (float)z);
+    //return glm::mix(glm::vec3(1, 0, 0), glm::vec3(0, 0, 1), t);
 
-                    // voronoi centroid
-                    glm::vec3 neighbor_point = random3D_to_3D_worley(p_floor + this_neighbor);
-
-                    glm::vec3 diff = this_neighbor + neighbor_point - p_fract;
-
-                    float d = glm::length(diff);
-
-                    min_d = glm::min(min_d, d);
-                }
-            }
-        }
-
-        return min_d;
-    }
+}

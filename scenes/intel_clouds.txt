@@ -37,12 +37,12 @@ DIFFUSE_BRDF
 IOR    			1.55
 EMITTANCE   	0
 
-ENVMAP ../scenes/textures/environment_maps/Milkyway/Milkyway_small.hdr
+ENVMAP ../scenes/textures/environment_maps/Winter_Forest/WinterForest_Ref.hdr
 
 // Heterogeneous medium
 MEDIUM 0
 heterogeneous
-../scenes/vdb/dustshockwave_0143.vdb
+../scenes/vdb/intel_clouds_med_res/intelCloudLib_dense.1.M.vdb
 ABSORPTION 0.01
 SCATTERING 0.1
 ASYM_G     0.001
