@@ -108,18 +108,6 @@ int main(int argc, char** argv) {
 	GuiParameters read_scene_to_gui = { glm::vec3(0.15f), glm::vec3(0.15f), 0.15f };
 	scene = new Scene(sceneFile, read_scene_to_gui);
 
-	//std::cout << scene->lbvh.size() << std::endl;
-	//ofstream myfile;
-	//myfile.open("lbvh_test.txt");
-	//for (int i = 0; i < scene->lbvh.size(); i++) {
-	//	myfile << "Curr Node: " << scene->lbvh[i].objectId << "\n";
-	//	myfile << "Left Child: " << scene->lbvh[i].left << "\n";
-	//	myfile << "Right Child: " << scene->lbvh[i].right << "\n";
-	//	myfile << "AABB: " << glm::to_string(scene->lbvh[i].aabb.min) << " " << glm::to_string(scene->lbvh[i].aabb.max) << "\n";
-	//}
-	//myfile << scene->lbvh.size() << "\n";
-	//myfile.close();
-
 	ui_max_ray_depth = scene->state.traceDepth;
 	last_max_ray_depth = scene->state.traceDepth;
 	ui_fov = scene->state.camera.fov.y;
@@ -382,10 +370,7 @@ void runCuda() {
 		int frame = 0;
 
 		if (ui_integrator == NULL_SCATTERING_MIS) {
-			timer().startGpuTimer();
 			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params, scene_info);
-			timer().endGpuTimer();
-			printElapsedTime(timer().getGpuElapsedTimeForPreviousOperation());
 		}
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 			volPathtrace(pbo_dptr, frame, iteration, gui_params);
