@@ -18,10 +18,10 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
 
 The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz/publications/miller19null.html) (Miller et al. 2019) enables us to use MIS for any media and generalizes previous techniques such as ratio tracking, delta tracking, and spectral tracking. It analytically solves for the pdf of a light path during runtime, allowing us to combine several sampling techniques at once using MIS. Additionally, null-scattering introduces fictitious matter into the volume, which does not affect light transport, but instead allows us to "homogenize" the total density and analytically sample collisions. We implement the null-scattering formulation in **CUDA** and use **NanoVDB** for loading volumetric data. 
 
-![](img/final/final_renders/wdas_cloud_sunset.PNG)
+![](img/final/final_renders/galaxy.png)
 <p align="center"><em>EmberGen Smoke Plume rendered in a galactic setting (1000 spp)</em></p>
 
-![](img/final/final_renders/wdas_cloud_sunset.PNG)
+![](img/final/final_renders/bunny_and_dragon.png)
 <p align="center"><em>Mesh dragon, volumetric bunny, and assorted spheres interacting in a scene. Notice how the bunny is visible in both the reflective sphere and glass sphere and casts shadows on the ground.</em></p>
 
 ### Presentations
@@ -88,7 +88,6 @@ To build this project, ensure that you have a **CUDA-enabled** NVIDIA GPU. We ha
 5. When building with `cmake`, if you run into an issue where it cannot find a library file, make sure the appropriate `.lib` file is in the `external` folder.
 
 </details>
-<br>
 
 #### OpenVDB and NanoVDB
 
@@ -130,7 +129,6 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 9. Note that NanoVDB files are included in the `openvdb` directory that you cloned.
 
 </details>
-<br>
 
 ### Main Concepts
 
@@ -148,8 +146,8 @@ The disadvantage of previous null-collision approaches is that they do not allow
 
 ### Pipeline 
 
-The CUDA kernel setup for the null-collision MIS framework is shown below in Figure XX, next to the diagram for the `Sample Participating Medium` kernel in particular. Overall, the volumetric integrator
-is similar to a normal surface integrator with MIS, with the key difference being: when a medium is entered by a ray, the `Sample Participating Medium` kernel will march through the medium until it reaches
+The CUDA kernel setup for the null-collision MIS framework is shown below, next to the diagram for the `sampleParticipatingMedium` kernel in particular. Overall, the volumetric integrator
+is similar to a normal surface integrator with MIS, with the key difference being: when a medium is entered by a ray, the `sampleParticipatingMedium` kernel will march through the medium until it reaches
 a scattering event, or is absorb by the medium. Additionally, due to the path integral formulation nature of the implementation, all pdfs and weights for MIS are tracked and calculated throughout all segments of the
 path. This allows for MIS within a participating medium, as well as with paths that encounter both surfaces and media.
 
@@ -254,7 +252,7 @@ with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `end
 
 #### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
-Figures XX and XX show the performance results on the two MIS testing scenes from above. Because in our integrator we use the same sampled wi for both GI and
+These graphs show the performance results on the two MIS testing scenes from above. Because in our integrator we use the same sampled wi for both GI and
 also BSDF/Phase function sampling, the unidirectional importance sampling technique is fastest. However, as mentioned above, there are cases where one or the other
 is not as good at obtaining the incoming light information, so MIS is a good strategy to have given it comes at a relatively low performance cost.
 
@@ -264,13 +262,13 @@ is not as good at obtaining the incoming light information, so MIS is a good str
 
 #### Varying Absorption, Scattering, and Phase Asymmetry
 
-Figure XX below showcases the impact of varying the absorption coefficient for the medium. The runtime impact
+The graph below showcases the impact of varying the absorption coefficient for the medium. The runtime impact
 of increasing this value appears to be roughly linear. This makes sense, as the rate of sample points along a ray within a medium is
 dependent on the coefficients of absorption and scattering.
 
 ![](img/final/performance/graphs/absorption.png)
 
-Figure XX below showcases the impact of varying the scattering coefficient for the medium. The runtime impact
+The graph below showcases the impact of varying the scattering coefficient for the medium. The runtime impact
 of increasing this value appears to also be roughly linear, for about the same reason as increasing the absorption.
 However, the slope of the linear increase is far greater, as increasing the scattering will increase the amount of rays
 that bounce through multiple-scattering and global-illumination paths, thus causing signifcant performance drawbacks.
@@ -278,7 +276,7 @@ Doubling the scattering coefficient, while making the medium look more cloud-lik
 
 ![](img/final/performance/graphs/scattering.png)
 
-Figure XX below showcases the impact of varying the phase function asymmetry of the medium. Because the phase function
+The graph below showcases the impact of varying the phase function asymmetry of the medium. Because the phase function
 does not factor into the rate of sample points along a ray travelling through a medium, varying the asymmetry does not
 really have an impact on performance in terms of runtime. As was shown above, it does have an impact on convergence, however,
 depending on the importance sampling strategy chosen.
@@ -287,7 +285,7 @@ depending on the importance sampling strategy chosen.
 
 #### Single Scattering vs. Multiple Scattering
 
-Figure XX below showcases the impact of increasing the maximum allowed bounces that can 
+The graph below showcases the impact of increasing the maximum allowed bounces that can 
 occur within a medium when a scattering event takes place. This increases the runtime in a similar way
 that increasing the maximum ray depth in a surface path tracer will, except in this
 cases all of the additional depth is spent inside the same volume.
@@ -296,7 +294,7 @@ cases all of the additional depth is spent inside the same volume.
 
 #### Varying Media Density Scale
 
-Figure XX below showcases the performance impact of increasing the scale of the density data within the vdb structure.
+The graph below showcases the performance impact of increasing the scale of the density data within the vdb structure.
 While increasing the scale increases the amount of the volume that interacts with light and creates much more detail in the
 volumetric data, it also increases the performance time as well. And, naturally, scaling up all the density values also increases
 the max density, and so this is where the performance hit is obtained.
@@ -305,7 +303,7 @@ the max density, and so this is where the performance hit is obtained.
 
 #### Varying Max Density Scale
 
-Figure XX below showcases the impact of artificially augmenting the max density by some constant amount.
+The graph below showcases the impact of artificially augmenting the max density by some constant amount.
 This means that this test doesn't change the actual density data in the vdb grid, but instead
 scales the calculated max density of the grid up. Doing this will still yield a physically correct
 result, however will dramatically increase the runtime. This is because the max density
@@ -319,7 +317,7 @@ we step smaller distances.
 
 #### Varying Scene Type (Box vs. Void)
 
-Figure XX below showcases the impact of having participating media and surfaces interact within
+The graph below showcases the impact of having participating media and surfaces interact within
 a scene. While the lighting benefits of the global illumination showcase a much more realistic
 looking smoke cloud, the performance impact is much worse. This is because, in the scene
 with nothing but a single area light, most of the rays either end when cast directly from the camera,
