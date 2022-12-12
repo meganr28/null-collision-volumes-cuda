@@ -1,0 +1,89 @@
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	2 2 6
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	6
+
+// Diffuse white
+MATERIAL 		1
+R_COLOR        	6 2 2
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	6
+
+// Diffuse red
+MATERIAL 2
+R_COLOR        	2 6 2
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	6
+
+// Diffuse green
+MATERIAL 3
+R_COLOR         0.14 0.45 0.091
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 4
+R_COLOR         0.85 0.81 0.78
+T_COLOR     	0.85 0.81 0.78
+DIFFUSE_BRDF
+IOR    			1.55
+EMITTANCE   	0
+
+// Heterogeneous medium
+MEDIUM 0
+heterogeneous
+../scenes/vdb/wdas_cloud.vdb
+ABSORPTION 0.01
+SCATTERING 0.1
+ASYM_G     0.001
+
+// Camera
+CAMERA
+RES         1920 1080
+FOVY        19.5
+ITERATIONS  5000
+DEPTH       1
+FILE        cornell
+FOCAL_DISTANCE	17.9
+LENS_RADIUS		0.0
+MEDIUM      -1
+EYE         0.0 70.5 75
+LOOKAT      0 70 0
+UP          0 1 0
+
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+mediuminterface -1 -1
+TRANS       0 360.9 400
+ROTAT       -215 0 0
+SCALE       300 300 1
+
+// Ceiling light
+OBJECT 1
+squareplane
+material 1
+mediuminterface -1 -1
+TRANS       0 360.9 -400
+ROTAT       35 0 0
+SCALE       300 300 1
+
+// Ceiling light
+OBJECT 2
+squareplane
+material 2
+mediuminterface -1 -1
+TRANS       0 360.9 0
+ROTAT       90 0 0
+SCALE       300 300 1

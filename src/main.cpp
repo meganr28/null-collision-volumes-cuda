@@ -5,32 +5,56 @@
 #include "preview.h"
 #include <cstring>
 
-//#define PATH_INTEGRATOR
-//#define VOLUME_INTEGRATOR
-//#define FULL_VOLUME_INTEGRATOR
+#include <glm/gtx/string_cast.hpp>
+
+#define DEFAULT_INTEGRATOR NULL_SCATTERING_MIS
+#define DEFAULT_IMPORTANCE_SAMPLING UNI_NEE_MIS
 
 static std::string startTimeString;
 
-// For camera controls
+// Camera Controls
 static bool leftMousePressed = false;
 static bool rightMousePressed = false;
 static bool middleMousePressed = false;
 static double lastX;
 static double lastY;
 
+// Integrator Selection Parameters
+IntegratorType ui_integrator = DEFAULT_INTEGRATOR;
+IntegratorType last_integrator = DEFAULT_INTEGRATOR;
+IntegratorType previous_integrator = DEFAULT_INTEGRATOR;
 
-IntegratorType ui_integrator = NULL_SCATTERING_MIS;
-IntegratorType last_integrator = NULL_SCATTERING_MIS;
-IntegratorType previous_integrator = NULL_SCATTERING_MIS;
+ImportanceSampling ui_importance_sampling = DEFAULT_IMPORTANCE_SAMPLING;
+ImportanceSampling last_importance_sampling = DEFAULT_IMPORTANCE_SAMPLING;
 
-int ui_max_ray_depth = 8;
-int last_max_ray_depth = 8;
+// Path Tracing Parameters
+int ui_max_ray_depth = 2;
+int last_max_ray_depth = 2;
+int ui_depth_padding = 2;
+int last_depth_padding = 2;
+int ui_refresh_bit = 0;
+int last_refresh_bit = 0;
+int refresh_rate = 1;
+
+// Camera Parameters
+float ui_fov = 19.5f;
+float last_fov = 19.5f;
+float ui_focal_distance = 17.9f;
+float last_focal_distance = 17.9f;
+float ui_lens_radius = 0.0f;
+float last_lens_radius = 0.0f;
+
+// Volumetric Parameters
 glm::vec3 ui_sigma_a = glm::vec3(0.15f);
 glm::vec3 last_sigma_a = glm::vec3(0.15f);
 glm::vec3 ui_sigma_s = glm::vec3(0.15f);
 glm::vec3 last_sigma_s = glm::vec3(0.15f);
 float ui_g= 0.15f;
 float last_g = 0.15f;
+float ui_density_offset = 0.0f;
+float last_density_offset = 0.0f;
+float ui_density_scale = 1.0f;
+float last_density_scale = 1.0f;
 
 
 static bool camchanged = true;
@@ -54,6 +78,18 @@ int height;
 
 bool beginning = true;
 
+PerformanceTimer& timer()
+{
+	static PerformanceTimer timer;
+	return timer;
+}
+
+template<typename T>
+void printElapsedTime(T time, std::string note = "")
+{
+	std::cout << time << std::endl;
+}
+
 //-------------------------------
 //-------------MAIN--------------
 //-------------------------------
@@ -71,8 +107,15 @@ int main(int argc, char** argv) {
 	// Load scene file
 	GuiParameters read_scene_to_gui = { glm::vec3(0.15f), glm::vec3(0.15f), 0.15f };
 	scene = new Scene(sceneFile, read_scene_to_gui);
+
 	ui_max_ray_depth = scene->state.traceDepth;
 	last_max_ray_depth = scene->state.traceDepth;
+	ui_fov = scene->state.camera.fov.y;
+	last_fov = scene->state.camera.fov.y;
+	ui_focal_distance = scene->state.camera.focal_distance;
+	last_focal_distance = scene->state.camera.focal_distance;
+	ui_lens_radius = scene->state.camera.lens_radius;
+	last_lens_radius = scene->state.camera.lens_radius;
 
 	if (scene->media.size() > 0) {
 		ui_sigma_a = read_scene_to_gui.sigma_a;
@@ -83,7 +126,7 @@ int main(int argc, char** argv) {
 		last_g = read_scene_to_gui.g;
 	}
 
-	std::cout << glm::length(glm::vec3(0.02, 0.03, 0.01)) << std::endl;
+
 
 	// Set up camera stuff from loaded path tracer settings
 	iteration = 0;
@@ -144,12 +187,45 @@ void saveImage() {
 
 void runCuda() {
 
+	if (last_importance_sampling != ui_importance_sampling) {
+		last_importance_sampling = ui_importance_sampling;
+		camchanged = true;
+
+	}
 
 	if (last_max_ray_depth != ui_max_ray_depth) {
 		last_max_ray_depth = ui_max_ray_depth;
 		camchanged = true;
 		
 	}
+
+	if (last_depth_padding != ui_depth_padding) {
+		last_depth_padding = ui_depth_padding;
+		camchanged = true;
+
+	}
+	if (last_refresh_bit != ui_refresh_bit) {
+		last_refresh_bit = ui_refresh_bit;
+		refresh_rate = 1 << ui_refresh_bit;
+		camchanged = true;
+	}
+
+
+
+	if (last_fov != ui_fov) {
+		last_fov = ui_fov;
+		camchanged = true;
+	}
+	if (last_focal_distance != ui_focal_distance) {
+		last_focal_distance = ui_focal_distance;
+		camchanged = true;
+	}
+	if (last_lens_radius != ui_lens_radius) {
+		last_lens_radius = ui_lens_radius;
+		camchanged = true;
+	}
+
+
 
 	if (last_sigma_a != ui_sigma_a) {
 		last_sigma_a = ui_sigma_a;
@@ -161,6 +237,16 @@ void runCuda() {
 	}
 	if (last_g != ui_g) {
 		last_g = ui_g;
+		camchanged = true;
+	}
+
+	if (last_density_offset != ui_density_offset) {
+		last_density_offset = ui_density_offset;
+		camchanged = true;
+	}
+
+	if (last_density_scale != ui_density_scale) {
+		last_density_scale = ui_density_scale;
 		camchanged = true;
 	}
 
@@ -194,6 +280,16 @@ void runCuda() {
 
 
 		scene->state.traceDepth = ui_max_ray_depth;
+		float yscaled = tan(ui_fov * (PI / 180));
+		float xscaled = (yscaled * scene->state.camera.resolution.x) / scene->state.camera.resolution.y;
+		float fovx = (atan(xscaled) * 180) / PI;
+		scene->state.camera.fov = glm::vec2(fovx, ui_fov);
+
+		scene->state.camera.pixelLength = glm::vec2(2 * xscaled / (float)scene->state.camera.resolution.x,
+			2 * yscaled / (float)scene->state.camera.resolution.y);
+
+		scene->state.camera.focal_distance = ui_focal_distance;
+		scene->state.camera.lens_radius = ui_lens_radius;
 
 	}
 
@@ -214,6 +310,9 @@ void runCuda() {
 			
 			volPathtraceFree();
 		}
+		else if (previous_integrator == SURFACE_ONLY_MIS) {
+			pathtraceFree();
+		}
 
 		beginning = false;
 
@@ -225,13 +324,29 @@ void runCuda() {
 
 			volPathtraceInit(scene);
 		}
+		else if (ui_integrator == SURFACE_ONLY_MIS) {
+
+			pathtraceInit(scene);
+		}
 		integratorchanged = false;
 	}
 
 	
 	//GuiParameters gui_params = { glm::vec3(ui_sigma_a), glm::vec3(ui_sigma_s), ui_g };
-	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), ui_g };
-	
+	GuiParameters gui_params = { glm::vec3(ui_sigma_a.x, ui_sigma_a.x, ui_sigma_a.x), 
+		glm::vec3(ui_sigma_s.x, ui_sigma_s.x, ui_sigma_s.x), 
+		ui_g, 
+		ui_max_ray_depth,
+		ui_depth_padding,
+		refresh_rate,
+		ui_refresh_bit,
+		ui_density_offset,
+		ui_density_scale,
+		ui_importance_sampling };
+
+	// Initialize scene info
+	SceneInfo scene_info = { scene->geoms.size(), scene->media.size(), scene->lights.size() };
+
 	// Map OpenGL buffer object for writing from CUDA on a single GPU
 	// No data is moved (Win & Linux). When mapped to CUDA, OpenGL should not use this buffer
 	if (iteration == 0) {
@@ -241,11 +356,9 @@ void runCuda() {
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 			volResetImage();
 		}
-
-#ifdef PATH_INTEGRATOR
-		pathtraceFree();
-		pathtraceInit(scene);
-#endif
+		else if (ui_integrator == SURFACE_ONLY_MIS) {
+			resetImage();
+		}
 	}
 
 	if (iteration < renderState->iterations) {
@@ -255,16 +368,16 @@ void runCuda() {
 
 		// execute the kernel
 		int frame = 0;
-#ifdef PATH_INTEGRATOR
-		pathtrace(pbo_dptr, frame, iteration);
-#endif
+
 		if (ui_integrator == NULL_SCATTERING_MIS) {
-			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params);
+			fullVolPathtrace(pbo_dptr, frame, iteration, gui_params, scene_info);
 		}
 		else if (ui_integrator == DELTA_TRACKING_NEE) {
 			volPathtrace(pbo_dptr, frame, iteration, gui_params);
 		}
-		
+		else if (ui_integrator == SURFACE_ONLY_MIS) {
+			pathtrace(pbo_dptr, frame, iteration);
+		}
 
 		// unmap buffer object
 		cudaGLUnmapBufferObject(pbo);

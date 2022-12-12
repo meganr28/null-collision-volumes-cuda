@@ -1,4 +1,5 @@
 #include <iostream>
+#include "lbvh.h"
 #include "scene.h"
 #include <cstring>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -12,12 +13,12 @@
 #include <tiny_gltf.h>
 
 Scene::Scene(string filename, GuiParameters& gui_params) {
-    cout << "Reading scene from " << filename << " ..." << endl;
-    cout << " " << endl;
+    std::cout << "Reading scene from " << filename << " ..." << endl;
+    std::cout << " " << endl;
     char* fname = (char*)filename.c_str();
     fp_in.open(fname);
     if (!fp_in.is_open()) {
-        cout << "Error reading from file - aborting!" << endl;
+        std::cout << "Error reading from file - aborting!" << endl;
         throw;
     }
 
@@ -29,42 +30,56 @@ Scene::Scene(string filename, GuiParameters& gui_params) {
             vector<string> tokens = utilityCore::tokenizeString(line);
             if (strcmp(tokens[0].c_str(), "MATERIAL") == 0) {
                 loadMaterial(tokens[1], gui_params);
-                cout << " " << endl;
+                std::cout << " " << endl;
             } 
             else if (strcmp(tokens[0].c_str(), "MEDIUM") == 0) {
                 loadMedium(tokens[1], gui_params);
-                cout << " " << endl;
+                std::cout << " " << endl;
             }
             else if (strcmp(tokens[0].c_str(), "OBJECT") == 0) {
                 loadGeom(tokens[1], gui_params);
-                cout << " " << endl;
+                std::cout << " " << endl;
             }
             else if (strcmp(tokens[0].c_str(), "CAMERA") == 0) {
                 loadCamera();
-                cout << " " << endl;
+                std::cout << " " << endl;
+            }
+            else if (strcmp(tokens[0].c_str(), "ENVMAP") == 0) {
+                loadEnvironmentMap(tokens[1]);
+                std::cout << " " << endl;
             }
         }
     }
 
-    if (mesh_tris.size() > 0) {
-        root_node = buildBVH(0, mesh_tris.size());
+    // Generate LBVH
+    if (triangles.size() > 0)
+    {
+        generateLBVH(this);
+    }
+}
 
-        reformatBVHToGPU();
 
-        std::cout << "num nodes: " << num_nodes << std::endl;
+int Scene::loadEnvironmentMap(string file_name) {
+    auto texture = new image(file_name);
+    env_map_width = texture->xSize;
+    env_map_height = texture->ySize;
+    for (int y = 0; y < env_map_height; y++) {
+        for (int x = 0; x < env_map_width; x++) {
+            int i = y * env_map_width + x;
+            //std::cout << texture->pixels[i].x << " " << texture->pixels[i].y << " " << texture->pixels[i].z << std::endl;
+        }
     }
 
-    /*for (int i = 0; i < num_nodes; ++i) {
-        std::cout << "NODE " << i << std::endl;
-        std::cout << "   AABB_min: " << bvh_nodes_gpu[i].AABB_min.x << " " << bvh_nodes_gpu[i].AABB_min.y << " " << bvh_nodes_gpu[i].AABB_min.z << " " << std::endl;
-        std::cout << "   AABB_max: " << bvh_nodes_gpu[i].AABB_max.x << " " << bvh_nodes_gpu[i].AABB_max.y << " " << bvh_nodes_gpu[i].AABB_max.z << " " << std::endl;
-        std::cout << "   num_tris: " << bvh_nodes_gpu[i].num_tris << std::endl;
-        std::cout << "   tri_index: " << bvh_nodes_gpu[i].tri_index << std::endl;
-        std::cout << "   offset_to_second_child: " << bvh_nodes_gpu[i].offset_to_second_child << std::endl;
-        std::cout << "   split_axis: " << bvh_nodes_gpu[i].axis << std::endl;
-    }*/
 
+    cudaMalloc(&dev_environment_map, texture->xSize * texture->ySize * sizeof(glm::vec3));
+    cudaMemcpy(dev_environment_map, texture->pixels, texture->xSize * texture->ySize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 
+    Light newLight;
+    newLight.geom_ID = -1;
+    lights.push_back(newLight);
+
+    delete texture;
+    return 1;
 }
 
 int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
@@ -99,111 +114,20 @@ int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
         }
 
         std::cout << num_tris << std::endl;
-        int starting_tri_size = num_tris;
+        //int starting_tri_size = num_tris;
+        int geomTris = 0;
+        int starting_tri_size = triangles.size();
 
         if (newGeom.type == MESH) {
 
             utilityCore::safeGetline(fp_in, line);
             if (!line.empty() && fp_in.good()) {
-                tinyobj::attrib_t attrib;
-                std::vector<tinyobj::shape_t> shapes;
-                std::vector<tinyobj::material_t> materials;
-                std::string warn, err;
-
-                if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, line.c_str())) {
-                    throw std::runtime_error(warn + err);
-                }
-
-                // every mesh in the obj
-                for (const tinyobj::shape_t& shape : shapes) {
-
-
-
-                    // every tri in the mesh
-                    for (int i = 0; i < shape.mesh.indices.size(); i += 3) {
-                        Tri newTri;
-
-                        
-
-                        glm::vec3 newP = glm::vec3(0.0f);
-                        glm::vec3 newN = glm::vec3(0.0f);
-                        glm::vec2 newT = glm::vec2(0.0f);
-
-                        for (int k = 0; k < 3; ++k) {
-
-                            if (shape.mesh.indices[i + k].vertex_index != -1) {
-                                newP = glm::vec3(attrib.vertices[3 * shape.mesh.indices[i + k].vertex_index + 0],
-                                    attrib.vertices[3 * shape.mesh.indices[i + k].vertex_index + 1],
-                                    attrib.vertices[3 * shape.mesh.indices[i + k].vertex_index + 2]);
-                            }
-
-                            if (shape.mesh.indices[i + k].texcoord_index != -1) {
-                                newT = glm::vec2(
-                                    attrib.texcoords[2 * shape.mesh.indices[i + k].texcoord_index + 0],
-                                    1.0f - attrib.texcoords[2 * shape.mesh.indices[i + k].texcoord_index + 1]
-                                );
-                            }
-
-                            if (shape.mesh.indices[i + k].normal_index != -1) {
-                                newN = glm::vec3(
-                                    attrib.normals[3 * shape.mesh.indices[i + k].normal_index + 0],
-                                    attrib.normals[3 * shape.mesh.indices[i + k].normal_index + 1],
-                                    attrib.normals[3 * shape.mesh.indices[i + k].normal_index + 2]
-                                );
-                            }
-
-                            if (k == 0) {
-                                newTri.p0 = newP;
-                                newTri.n0 = newN;
-                                newTri.t0 = newT;
-                            }
-                            else if (k == 1) {
-                                newTri.p1 = newP;
-                                newTri.n1 = newN;
-                                newTri.t1 = newT;
-                            }
-                            else {
-                                newTri.p2 = newP;
-                                newTri.n2 = newN;
-                                newTri.t2 = newT;
-                            }
-                        }
-
-
-                        newTri.plane_normal = glm::normalize(glm::cross(newTri.p1 - newTri.p0, newTri.p2 - newTri.p1));
-                        newTri.S = glm::length(glm::cross(newTri.p1 - newTri.p0, newTri.p2 - newTri.p1));
-
-                        TriBounds newTriBounds;
-
-                        newTriBounds.tri_ID = num_tris;
-                        
-
-                        float max_x = glm::max(glm::max(newTri.p0.x, newTri.p1.x), newTri.p2.x);
-                        float max_y = glm::max(glm::max(newTri.p0.y, newTri.p1.y), newTri.p2.y);
-                        float max_z = glm::max(glm::max(newTri.p0.z, newTri.p1.z), newTri.p2.z);
-                        newTriBounds.AABB_max = glm::vec3(max_x, max_y, max_z);
-
-                        float min_x = glm::min(glm::min(newTri.p0.x, newTri.p1.x), newTri.p2.x);
-                        float min_y = glm::min(glm::min(newTri.p0.y, newTri.p1.y), newTri.p2.y);
-                        float min_z = glm::min(glm::min(newTri.p0.z, newTri.p1.z), newTri.p2.z);
-                        newTriBounds.AABB_min = glm::vec3(min_x, min_y, min_z);
-
-                        float mid_x = (newTri.p0.x + newTri.p1.x + newTri.p2.x) / 3.0;
-                        float mid_y = (newTri.p0.y + newTri.p1.y + newTri.p2.y) / 3.0;
-                        float mid_z = (newTri.p0.z + newTri.p1.z + newTri.p2.z) / 3.0;
-                        newTriBounds.AABB_centroid = glm::vec3(mid_x, mid_y, mid_z);
-
-                        tri_bounds.push_back(newTriBounds);
-
-                        mesh_tris.push_back(newTri);
-                        num_tris++;
-                    }
-                    //std::cout << num_tris << std::endl;
-                }
+                loadOBJ(newGeom, geomTris, line.c_str(), id);
             }
         }
 
-        int ending_tri_size = mesh_tris.size();
+        //int ending_tri_size = mesh_tris.size();
+        int ending_tri_size = starting_tri_size + geomTris;
 
         //link material
         utilityCore::safeGetline(fp_in, line);
@@ -215,7 +139,8 @@ int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
 
         if (newGeom.type == MESH) {
             for (int i = starting_tri_size; i < ending_tri_size; ++i) {
-                mesh_tris[i].mat_ID = newGeom.materialid;
+                //mesh_tris[i].mat_ID = newGeom.materialid;
+                triangles[i].mat_ID = newGeom.materialid;
             }
         }
 
@@ -225,12 +150,14 @@ int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
             vector<string> tokens = utilityCore::tokenizeString(line);
             newGeom.mediumInterface.inside = atoi(tokens[1].c_str());
             newGeom.mediumInterface.outside = atoi(tokens[2].c_str());
+
             cout << "Connecting Geom " << objectid << " to Medium Interface " << newGeom.mediumInterface.inside << " " << newGeom.mediumInterface.outside << "..." << endl;
         }
 
         if (newGeom.type == MESH) {
             for (int i = starting_tri_size; i < ending_tri_size; ++i) {
-                mesh_tris[i].mediumInterface = newGeom.mediumInterface;
+                //mesh_tris[i].mediumInterface = newGeom.mediumInterface;
+                triangles[i].mediumInterface = newGeom.mediumInterface;
             }
         }
 
@@ -256,14 +183,14 @@ int Scene::loadGeom(string objectid, GuiParameters& gui_params) {
         newGeom.inverseTransform = glm::inverse(newGeom.transform);
         newGeom.invTranspose = glm::inverseTranspose(newGeom.transform);
 
-        if (newGeom.type != MESH) {
+        //if (newGeom.type != MESH) {
             geoms.push_back(newGeom);
             if (materials[newGeom.materialid].emittance > 0.0f) {
                 Light newLight;
                 newLight.geom_ID = geoms.size() - 1;
                 lights.push_back(newLight);
             }
-        }
+        //}
 
         return 1;
     }
@@ -428,6 +355,18 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
             }
         }
 
+        if (newMedium.type == HOMOGENEOUS) {
+            newMedium.aabb_min = glm::vec3(0.0f);
+            newMedium.aabb_max = glm::vec3(0.0f);
+            newMedium.index_min = glm::vec3(0.0f);
+            newMedium.index_max = glm::vec3(0.0f);
+            newMedium.gx = 0;
+            newMedium.gx = 0;
+            newMedium.gz = 0;
+            newMedium.maxDensity = 0.1f;
+            newMedium.invMaxDensity = 10.0f;
+        }
+
         if (newMedium.type == HETEROGENEOUS) {
             utilityCore::safeGetline(fp_in, line);
             if (!line.empty() && fp_in.good()) {
@@ -464,11 +403,6 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
                 auto boundingBox = grid->worldBBox();
                 auto min_index = grid->worldToIndex(boundingBox.min());
                 auto max_index = grid->worldToIndex(boundingBox.max());
-                std::cout << "Min index using transform:  " << min_index[0] << " " << min_index[1] << " " << min_index[2] << std::endl;
-                std::cout << "Max index using transform:  " << max_index[0] << " " << max_index[1] << " " << max_index[2] << std::endl;
-
-                
-
 
                 auto gridDim = boundingBox.dim();
                 nanovdb::Vec3R aabb_min = boundingBox.min();
@@ -495,9 +429,9 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
                 // Set inverse max density
                 float maxDensity = 0.0f;
                 int numVoxels = newMedium.gx * newMedium.gy * newMedium.gz;
-                for (int x = 0; x < newMedium.gx; ++x) {
-                    for (int y = 0; y < newMedium.gy; ++y) {
-                        for (int z = 0; z < newMedium.gz; ++z) {
+                for (int x = newMedium.index_min.x; x < newMedium.index_max.x; ++x) {
+                    for (int y = newMedium.index_min.y; y < newMedium.index_max.y; ++y) {
+                        for (int z = newMedium.index_min.z; z < newMedium.index_max.z; ++z) {
                             maxDensity = glm::max(maxDensity, dstAcc.getValue(nanovdb::Coord(x, y, z)));
                         }
                     }
@@ -522,12 +456,6 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
                 glm::vec4 aabb_max_v4 = glm::vec4(aabb_max[0], aabb_max[1], aabb_max[2], 1.0);
                 glm::vec3 transformed_aabb_min = glm::vec3(newMedium.worldToMedium * aabb_min_v4);
                 glm::vec3 transformed_aabb_max = glm::vec3(newMedium.worldToMedium * aabb_max_v4);
-
-                /*std::cout << "Transformed Min Before: " << glm::to_string(aabb_min_v4) << std::endl;
-                std::cout << "Transformed Min After: " << glm::to_string(transformed_aabb_min) << std::endl;
-
-                std::cout << "Transformed Max Before: " << glm::to_string(aabb_max_v4) << std::endl;
-                std::cout << "Transformed Max After: " << glm::to_string(transformed_aabb_max) << std::endl;*/
 
                 file.close();
             }
@@ -566,168 +494,91 @@ int Scene::loadMedium(string mediumid, GuiParameters& gui_params) {
     }
 }
 
-// PBRT BVH as reference
-// https://www.pbr-book.org/3ed-2018/Primitives_and_Intersection_Acceleration/Bounding_Volume_Hierarchies
+// Load obj using tinyobjloader (based off of example give by tinyobj library)
+int Scene::loadOBJ(Geom &newGeom, int& geomTris, string filename, int objectid)
+{
+    // Load obj using tinyobjloader
+    std::string inputfile = filename;
+    tinyobj::ObjReaderConfig reader_config;
+    tinyobj::ObjReader reader;
 
-BVHNode* Scene::buildBVH(int start_index, int end_index) {
-    BVHNode* new_node = new BVHNode();
-    num_nodes++;
-    int num_tris_in_node = end_index - start_index;
-
-    // get the AABB bounds for this node (getting min and max of all triangles within)
-    glm::vec3 max_bounds = glm::vec3(-100000.0);
-    glm::vec3 min_bounds = glm::vec3(100000.0);
-    for (int i = start_index; i < end_index; ++i) {
-        if (max_bounds.x < tri_bounds[i].AABB_max.x) {
-            max_bounds.x = tri_bounds[i].AABB_max.x;
+    if (!reader.ParseFromFile(inputfile, reader_config)) {
+        if (!reader.Error().empty()) {
+            std::cerr << "TinyObjReader: " << reader.Error();
         }
-        if (max_bounds.y < tri_bounds[i].AABB_max.y) {
-            max_bounds.y = tri_bounds[i].AABB_max.y;
-        }
-        if (max_bounds.z < tri_bounds[i].AABB_max.z) {
-            max_bounds.z = tri_bounds[i].AABB_max.z;
-        }
-
-        if (min_bounds.x > tri_bounds[i].AABB_min.x) {
-            min_bounds.x = tri_bounds[i].AABB_min.x;
-        }
-        if (min_bounds.y > tri_bounds[i].AABB_min.y) {
-            min_bounds.y = tri_bounds[i].AABB_min.y;
-        }
-        if (min_bounds.z > tri_bounds[i].AABB_min.z) {
-            min_bounds.z = tri_bounds[i].AABB_min.z;
-        }
+        exit(1);
     }
 
-    // leaf node (with 1 tri in it)
-    if (num_tris_in_node <= 1) {
-        mesh_tris_sorted.push_back(mesh_tris[tri_bounds[start_index].tri_ID]);
-        new_node->tri_index = mesh_tris_sorted.size() - 1;
-        new_node->AABB_max = max_bounds;
-        new_node->AABB_min = min_bounds;
-        return new_node;
+    if (!reader.Warning().empty()) {
+        std::cout << "TinyObjReader: " << reader.Warning();
     }
-    // intermediate node (covering tris start_index through end_index
-    else {
-        // get the greatest length between tri centroids in each direction x, y, and z
-        glm::vec3 centroid_max = glm::vec3(-100000.0);
-        glm::vec3 centroid_min = glm::vec3(100000.0);
-        for (int i = start_index; i < end_index; ++i) {
-            if (centroid_max.x < tri_bounds[i].AABB_centroid.x) {
-                centroid_max.x = tri_bounds[i].AABB_centroid.x;
-            }
-            if (centroid_max.y < tri_bounds[i].AABB_centroid.y) {
-                centroid_max.y = tri_bounds[i].AABB_centroid.y;
-            }
-            if (centroid_max.z < tri_bounds[i].AABB_centroid.z) {
-                centroid_max.z = tri_bounds[i].AABB_centroid.z;
-            }
 
-            if (centroid_min.x > tri_bounds[i].AABB_centroid.x) {
-                centroid_min.x = tri_bounds[i].AABB_centroid.x;
+    auto& attrib = reader.GetAttrib();
+    auto& shapes = reader.GetShapes();
+    auto& materials = reader.GetMaterials();
+
+    meshCount = 0;
+    for (size_t s = 0; s < shapes.size(); s++) {
+        std::vector<Tri> mesh_triangles;
+
+        // Track aabb
+        mesh_aabbs.resize(shapes.size());
+        glm::vec3 min = glm::vec3(INFINITY, INFINITY, INFINITY);
+        glm::vec3 max = glm::vec3(-INFINITY, -INFINITY, -INFINITY);
+
+        // Loop over faces(polygon)
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+            size_t fv = size_t(shapes[s].mesh.num_face_vertices[f]);
+
+            // Loop over vertices in the face.
+            Tri triangle;
+
+            int i = 0;
+            for (size_t v = 0; v < fv; v++) {
+                // access to vertex
+                tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+
+                tinyobj::real_t vx = attrib.vertices[3 * size_t(idx.vertex_index) + 0];
+                tinyobj::real_t vy = attrib.vertices[3 * size_t(idx.vertex_index) + 1];
+                tinyobj::real_t vz = attrib.vertices[3 * size_t(idx.vertex_index) + 2];
+                triangle.verts[i] = glm::vec3((float)vx, (float)vy, (float)vz);
+
+                if (idx.normal_index >= 0) {
+                    tinyobj::real_t nx = attrib.normals[3 * size_t(idx.normal_index) + 0];
+                    tinyobj::real_t ny = attrib.normals[3 * size_t(idx.normal_index) + 1];
+                    tinyobj::real_t nz = attrib.normals[3 * size_t(idx.normal_index) + 2];
+                    triangle.norms[i] = glm::vec3((float)nx, (float)ny, (float)nz);
+                }
+
+                // Determine AABB min and max
+                min = glm::min(min, triangle.verts[i]);
+                max = glm::max(max, triangle.verts[i]);
+
+                i++;
             }
-            if (centroid_min.y > tri_bounds[i].AABB_centroid.y) {
-                centroid_min.y = tri_bounds[i].AABB_centroid.y;
-            }
-            if (centroid_min.z > tri_bounds[i].AABB_centroid.z) {
-                centroid_min.z = tri_bounds[i].AABB_centroid.z;
-            }
+            triangle.computeAABB();
+            triangle.computeCentroid();
+            triangle.computePlaneNormal();
+            triangle.computeArea();
+            triangle.objectId = f;
+            mesh_triangles.push_back(triangle);
+
+            index_offset += fv;
         }
-        glm::vec3 centroid_extent = centroid_max - centroid_min;
 
-        // choose dimension to split along (dimension with largest extent)
-        int dimension_to_split = 0;
-        if (centroid_extent.x >= centroid_extent.y && centroid_extent.x >= centroid_extent.z) {
-            dimension_to_split = 0;
-        }
-        else if (centroid_extent.y >= centroid_extent.x && centroid_extent.y >= centroid_extent.z) {
-            dimension_to_split = 1;
-        }
-        else {
-            dimension_to_split = 2;
-        }
+        // Set AABB
+        mesh_aabbs[s].min = min;
+        mesh_aabbs[s].max = max;
 
-
-        int mid_point = (start_index + end_index) / 2;
-        float centroid_midpoint = (centroid_min[dimension_to_split] + centroid_max[dimension_to_split]) / 2;
-
-        if (centroid_min[dimension_to_split] == centroid_max[dimension_to_split]) {
-            mesh_tris_sorted.push_back(mesh_tris[tri_bounds[start_index].tri_ID]);
-            new_node->tri_index = mesh_tris_sorted.size() - 1;
-            new_node->AABB_max = max_bounds;
-            new_node->AABB_min = min_bounds;
-            return new_node;
-        }
-
-        // partition triangles in bounding box, ones with centroids less than the midpoint go before ones with greater than
-        // using std::partition for partition algorithm
-        // https://en.cppreference.com/w/cpp/algorithm/partition
-        TriBounds* pointer_to_partition_point = std::partition(&tri_bounds[start_index], &tri_bounds[end_index - 1] + 1,
-                [dimension_to_split, centroid_midpoint](const TriBounds& triangle_AABB) {
-                return triangle_AABB.AABB_centroid[dimension_to_split] < centroid_midpoint;
-        });
-
-        // get the pointer relative to the start of the array
-        mid_point = pointer_to_partition_point - &tri_bounds[0];
-
-        // create two children nodes each for one side of the partitioned node
-        new_node->child_nodes[0] = buildBVH(start_index, mid_point);
-        new_node->child_nodes[1] = buildBVH(mid_point, end_index);
-
-        new_node->split_axis = dimension_to_split;
-        new_node->tri_index = -1;
-            
-        new_node->AABB_max.x = glm::max(new_node->child_nodes[0]->AABB_max.x, new_node->child_nodes[1]->AABB_max.x);
-        new_node->AABB_max.y = glm::max(new_node->child_nodes[0]->AABB_max.y, new_node->child_nodes[1]->AABB_max.y);
-        new_node->AABB_max.z = glm::max(new_node->child_nodes[0]->AABB_max.z, new_node->child_nodes[1]->AABB_max.z);
-
-        new_node->AABB_min.x = glm::min(new_node->child_nodes[0]->AABB_min.x, new_node->child_nodes[1]->AABB_min.x);
-        new_node->AABB_min.y = glm::min(new_node->child_nodes[0]->AABB_min.y, new_node->child_nodes[1]->AABB_min.y);
-        new_node->AABB_min.z = glm::min(new_node->child_nodes[0]->AABB_min.z, new_node->child_nodes[1]->AABB_min.z);
-        return new_node;
+        // Set mesh attributes
+        newGeom.aabb = mesh_aabbs[s];
+        newGeom.startIdx = triangles.size();
+        newGeom.triangleCount = mesh_triangles.size();
+        geomTris = newGeom.triangleCount;
+        triangles.insert(triangles.end(), mesh_triangles.begin(), mesh_triangles.end());
+        meshCount++;
     }
-}
 
-void Scene::reformatBVHToGPU() {
-    BVHNode *cur_node;
-    std::stack<BVHNode*> nodes_to_process;
-    std::stack<int> index_to_parent;
-    std::stack<bool> second_child_query;
-    int cur_node_index = 0;
-    int parent_index = 0;
-    bool is_second_child = false;
-    nodes_to_process.push(root_node);
-    index_to_parent.push(-1);
-    second_child_query.push(false);
-    while (!nodes_to_process.empty()) {
-        BVHNode_GPU new_gpu_node;
-
-        cur_node = nodes_to_process.top();
-        nodes_to_process.pop();
-        parent_index = index_to_parent.top();
-        index_to_parent.pop();
-        is_second_child = second_child_query.top();
-        second_child_query.pop();
-
-        if (is_second_child && parent_index != -1) {
-            bvh_nodes_gpu[parent_index].offset_to_second_child = bvh_nodes_gpu.size();
-        }
-        new_gpu_node.AABB_min = cur_node->AABB_min;
-        new_gpu_node.AABB_max = cur_node->AABB_max;
-        if (cur_node->tri_index != -1) {
-            // leaf node
-            new_gpu_node.tri_index = cur_node->tri_index;
-        }
-        else {
-            // intermediate node
-            new_gpu_node.tri_index = -1;
-            nodes_to_process.push(cur_node->child_nodes[1]);
-            index_to_parent.push(bvh_nodes_gpu.size());
-            second_child_query.push(true);
-            nodes_to_process.push(cur_node->child_nodes[0]);
-            index_to_parent.push(-1);
-            second_child_query.push(false);
-        }
-        bvh_nodes_gpu.push_back(new_gpu_node);
-    }
+    return 1;
 }

@@ -29,7 +29,6 @@
 #define ENABLE_TRIS
 #define ENABLE_SQUAREPLANES
 
-#define BOUNCE_PADDING 16
 
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
@@ -68,7 +67,7 @@ static Light* dev_lights = NULL;
 static Material* dev_materials = NULL;
 static PathSegment* dev_paths = NULL;
 static ShadeableIntersection* dev_intersections = NULL;
-static BVHNode_GPU* dev_bvh_nodes = NULL;
+static LBVHNode* dev_lbvh = NULL;
 static Medium* dev_media = NULL;
 static nanovdb::NanoGrid<float>* dev_media_density = NULL;
 //cudaStream_t media_stream;
@@ -112,11 +111,14 @@ void volPathtraceInit(Scene* scene) {
 	cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
 	cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(Geom), cudaMemcpyHostToDevice);
 
-	cudaMalloc(&dev_tris, scene->num_tris * sizeof(Tri));
-	cudaMemcpy(dev_tris, scene->mesh_tris_sorted.data(), scene->num_tris * sizeof(Tri), cudaMemcpyHostToDevice);
+	/*cudaMalloc(&dev_tris, scene->num_tris * sizeof(Tri));
+	cudaMemcpy(dev_tris, scene->mesh_tris_sorted.data(), scene->num_tris * sizeof(Tri), cudaMemcpyHostToDevice);*/
 
-	cudaMalloc(&dev_bvh_nodes, scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU));
-	cudaMemcpy(dev_bvh_nodes, scene->bvh_nodes_gpu.data(), scene->bvh_nodes_gpu.size() * sizeof(BVHNode_GPU), cudaMemcpyHostToDevice);
+	cudaMalloc(&dev_tris, scene->triangles.size() * sizeof(Tri));
+	cudaMemcpy(dev_tris, scene->triangles.data(), scene->triangles.size() * sizeof(Tri), cudaMemcpyHostToDevice);
+	
+	cudaMalloc(&dev_lbvh, scene->lbvh.size() * sizeof(LBVHNode));
+	cudaMemcpy(dev_lbvh, scene->lbvh.data(), scene->lbvh.size() * sizeof(LBVHNode), cudaMemcpyHostToDevice);
 
 	cudaMalloc(&dev_lights, scene->lights.size() * sizeof(Light));
 	cudaMemcpy(dev_lights, scene->lights.data(), scene->lights.size() * sizeof(Light), cudaMemcpyHostToDevice);
@@ -160,15 +162,43 @@ void volPathtraceFree() {
 	cudaFree(dev_paths);
 	cudaFree(dev_geoms);
 	cudaFree(dev_tris);
-	cudaFree(dev_bvh_nodes);
+	cudaFree(dev_lbvh);
 	cudaFree(dev_materials);
 	cudaFree(dev_intersections);
-	// TODO: clean up any extra device memory you created
 	cudaFree(dev_lights);
 	cudaFree(dev_direct_light_rays);
 	cudaFree(dev_direct_light_isects);
 	cudaFree(dev_bsdf_light_rays);
 	cudaFree(dev_bsdf_light_isects);
+}
+
+/**
+* Concentric Disk Sampling from PBRT Chapter 13.6.2
+*/
+__host__ __device__ glm::vec3 concentricSampleDisk_Vol(glm::vec2& sample)
+{
+	// Map sample point (uniform random numbers) to range [-1, 1]
+	glm::vec2 mappedSample = 2.f * sample - glm::vec2(1.f, 1.f);
+
+	// Handle origin to avoid divide by zero
+	if (mappedSample.x == 0.f && mappedSample.y == 0.f) {
+		return glm::vec3(0.f);
+	}
+
+	// Apply concentric mapping to the adjusted sample point
+	float r = 0.f;
+	float theta = 0.f;
+	// Find r and theta depending on x and y coords of mapped point
+	if (std::abs(mappedSample.x) > std::abs(mappedSample.y)) {
+		r = mappedSample.x;
+		theta = (PI / 4.0f) * (mappedSample.y / mappedSample.x);
+	}
+	else {
+		r = mappedSample.y;
+		theta = (PI / 2.0f) - (PI / 4.0f) * (mappedSample.x / mappedSample.y);
+	}
+
+	return glm::vec3(r * glm::cos(theta), r * glm::sin(theta), 0.0f);
 }
 
 __global__ void generateRayFromThinLensCamera_Vol(Camera cam, int iter, int traceDepth, float jitterX, float jitterY, glm::vec3 thinLensCamOrigin, glm::vec3 newRef,
@@ -208,7 +238,7 @@ __global__ void generateRayFromThinLensCamera_Vol(Camera cam, int iter, int trac
 	}
 }
 
-__global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth, float jitterX, float jitterY,
+__global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth,
 	PathSegment* pathSegments)
 {
 	__shared__ PathSegment mat[BLOCK_SIZE_2D][BLOCK_SIZE_2D];
@@ -217,6 +247,8 @@ __global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth, 
 	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
 	int index = x + (y * cam.resolution.x);
 
+	thrust::uniform_real_distribution<float> upixel(0.0, 1.0f);
+
 	if (x < cam.resolution.x && y < cam.resolution.y) {
 		mat[threadIdx.x][threadIdx.y] = pathSegments[index];
 		PathSegment& segment = mat[threadIdx.x][threadIdx.y];
@@ -224,22 +256,45 @@ __global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth, 
 		segment.ray.origin = cam.position;
 		segment.rng_engine = makeSeededRandomEngine_Vol(iter, index, traceDepth);
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.p_uni = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.p_nee = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
 		segment.medium = cam.medium;
 
+		float jitterX = upixel(segment.rng_engine);
+		float jitterY = upixel(segment.rng_engine);
+
 		float jittered_x = ((float)x) + jitterX;
 		float jittered_y = ((float)y) + jitterY;
 
-		// TODO: implement antialiasing by jittering the ray
+		// Add antialiasing by jittering the ray
 		segment.ray.direction = glm::normalize(
 			cam.view - cam.right * cam.pixelLength.x * (jittered_x - (float)cam.resolution.x * 0.5f)
 			- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
 		);
 
-		segment.ray.direction_inv = 1.0f / segment.ray.direction;
+		// Add depth of field
+		if (cam.lens_radius > 0.0f) {
+			// Get sample on lens
+			glm::vec2 thinLensSample = glm::vec2(upixel(segment.rng_engine), upixel(segment.rng_engine));
+			glm::vec3 lensPoint = cam.lens_radius * concentricSampleDisk_Vol(thinLensSample);
 
+			// Get focal point
+			float focalT = (cam.focal_distance / glm::length(cam.lookAt - cam.position));
+			glm::vec3 newRef = segment.ray.origin + focalT * (cam.lookAt - cam.position);
+
+			// Update ray
+			segment.ray.origin += lensPoint;
+			glm::vec3 newView = glm::normalize(newRef - segment.ray.origin);
+			segment.ray.direction = glm::normalize(
+				newView - cam.right * cam.pixelLength.x * (jittered_x - (float)cam.resolution.x * 0.5f)
+				- cam.up * cam.pixelLength.y * (jittered_y - (float)cam.resolution.y * 0.5f)
+			);
+		}
+
+		segment.ray.direction_inv = 1.0f / segment.ray.direction;
 		segment.remainingBounces = traceDepth;
 
 		pathSegments[index] = mat[threadIdx.x][threadIdx.y];
@@ -257,7 +312,7 @@ __global__ void computeIntersections_Vol(
 	, Medium* media
 	, int media_size
 	, ShadeableIntersection* intersections
-	, BVHNode_GPU* bvh_nodes
+	, LBVHNode* lbvh
 )
 {
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -276,100 +331,6 @@ __global__ void computeIntersections_Vol(
 		glm::vec3 tmp_normal;
 		int obj_ID = -1;
 
-#ifdef ENABLE_TRIS
-		if (tris_size != 0) {
-			int stack_pointer = 0;
-			int cur_node_index = 0;
-			int node_stack[32];
-			BVHNode_GPU cur_node;
-			glm::vec3 P;
-			glm::vec3 s;
-			float t1;
-			float t2;
-			float tmin;
-			float tmax;
-			while (true) {
-				cur_node = bvh_nodes[cur_node_index];
-
-				// (ray-aabb test node)
-				t1 = (cur_node.AABB_min.x - r.origin.x) * r.direction_inv.x;
-				t2 = (cur_node.AABB_max.x - r.origin.x) * r.direction_inv.x;
-
-				tmin = glm::min(t1, t2);
-				tmax = glm::max(t1, t2);
-
-				t1 = (cur_node.AABB_min.y - r.origin.y) * r.direction_inv.y;
-				t2 = (cur_node.AABB_max.y - r.origin.y) * r.direction_inv.y;
-
-				tmin = glm::max(tmin, glm::min(t1, t2));
-				tmax = glm::min(tmax, glm::max(t1, t2));
-
-				t1 = (cur_node.AABB_min.z - r.origin.z) * r.direction_inv.z;
-				t2 = (cur_node.AABB_max.z - r.origin.z) * r.direction_inv.z;
-
-				tmin = glm::max(tmin, glm::min(t1, t2));
-				tmax = glm::min(tmax, glm::max(t1, t2));
-
-				if (tmax >= tmin) {
-					// we intersected AABB
-					if (cur_node.tri_index != -1) {
-						// this is leaf node
-						// triangle intersection test
-						Tri tri = tris[cur_node.tri_index];
-
-						t = glm::dot(tri.plane_normal, (tri.p0 - r.origin)) / glm::dot(tri.plane_normal, r.direction);
-						if (t >= -0.0001f) {
-							P = r.origin + t * r.direction;
-
-							// barycentric coords
-							s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-								glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-								glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-							if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-								s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && isect.t > t) {
-								isect.t = t;
-								isect.materialId = tri.mat_ID;
-								isect.surfaceNormal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
-
-								// Check if surface is medium transition
-								if (IsMediumTransition(tri.mediumInterface)) {
-									isect.mediumInterface = tri.mediumInterface;
-								}
-								else {
-									MediumInterface mediumInterface;
-									mediumInterface.inside = pathSegments[path_index].medium;
-									mediumInterface.outside = pathSegments[path_index].medium;
-									isect.mediumInterface = mediumInterface;
-								}
-							}
-						}
-						// if last node in tree, we are done
-						if (stack_pointer == 0) {
-							break;
-						}
-						// otherwise need to check rest of the things in the stack
-						stack_pointer--;
-						cur_node_index = node_stack[stack_pointer];
-					}
-					else {	
-						node_stack[stack_pointer] = cur_node.offset_to_second_child;
-						stack_pointer++;
-						cur_node_index++;
-					}
-				}
-				else {
-					// didn't intersect AABB, remove from stack
-					if (stack_pointer == 0) {
-						break;
-					}
-					stack_pointer--;
-					cur_node_index = node_stack[stack_pointer];
-				}
-			}
-		}
-#endif
-
 		for (int i = 0; i < geoms_size; ++i)
 		{
 			Geom& geom = geoms[i];
@@ -384,9 +345,14 @@ __global__ void computeIntersections_Vol(
 				t = squareplaneIntersectionTest(geom, r, tmp_normal);
 #endif	
 			}
-			else {
+			else if (geom.type == CUBE) {
 #ifdef ENABLE_RECTS
-			t = boxIntersectionTest(geom, r, tmp_normal);
+				t = boxIntersectionTest(geom, r, tmp_normal);
+#endif
+			}
+			else if (geom.type == MESH) {
+#ifdef ENABLE_TRIS
+				t = lbvhIntersectionTest(pathSegments[path_index], lbvh, tris, r, geom.triangleCount, tmp_normal, true);
 #endif
 			}
 
@@ -421,21 +387,18 @@ __global__ void computeIntersections_Vol(
 				isect.t = t;
 				isect.materialId = -1;
 				isect.surfaceNormal = glm::vec3(0.0f);
-
+				isect.tMin = tMin;
+				isect.tMax = tMax;
 
 				// TODO: change this to handle more advanced cases
 				isect.mediumInterface.inside = j;
 				isect.mediumInterface.outside = -1;
-
-				isect.tMin = tMin;
-				isect.tMax = tMax;
 			}
 		}
 
 		if (isect.t >= MAX_INTERSECT_DIST) {
 			// hits nothing
 			pathSegments[path_index].remainingBounces = 0;
-			//pathSegments[path_index].accumulatedIrradiance += glm::vec3(0.55, .65, 0.85);
 		}
 		else {
 			intersections[path_index] = isect;
@@ -565,7 +528,6 @@ __global__ void generateSurfaceDirectLightSample(
 			pathSegments[idx].ray.origin = pathSegments[idx].ray.origin + (intersection.t * pathSegments[idx].ray.direction) + (0.001f * pathSegments[idx].ray.direction);
 			/*pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
 			intersection.mediumInterface.inside;*/
-
 			pathSegments[idx].medium = insideMedium(pathSegments[idx], intersection.tMin, intersection.tMax, 0) ? intersection.mediumInterface.inside : intersection.mediumInterface.outside;
 			//pathSegments[idx].remainingBounces--;
 			pathSegments[idx].prev_hit_null_material = true;
@@ -623,7 +585,7 @@ __global__ void computeVisVolumetric(
 	, Medium* media
 	, int media_size
 	, MISLightIntersection* direct_light_intersections
-	, BVHNode_GPU* bvh_nodes
+	, LBVHNode* lbvh
 	, const nanovdb::NanoGrid<float>* media_density
 	, GuiParameters gui_params
 	
@@ -664,98 +626,6 @@ __global__ void computeVisVolumetric(
 			glm::vec3 tmp_normal;
 			int mat_id = -1;
 
-#ifdef ENABLE_TRIS
-			if (tris_size != 0) {
-				int stack_pointer = 0;
-				int cur_node_index = 0;
-				int node_stack[32];
-				BVHNode_GPU cur_node;
-				glm::vec3 P;
-				glm::vec3 s;
-				float t1;
-				float t2;
-				float tmin;
-				float tmax;
-				while (true) {
-					cur_node = bvh_nodes[cur_node_index];
-
-					// (ray-aabb test node)
-					t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
-					t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
-
-					tmin = glm::min(t1, t2);
-					tmax = glm::max(t1, t2);
-
-					t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
-					t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
-
-					tmin = glm::max(tmin, glm::min(t1, t2));
-					tmax = glm::min(tmax, glm::max(t1, t2));
-
-					t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
-					t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
-
-					tmin = glm::max(tmin, glm::min(t1, t2));
-					tmax = glm::min(tmax, glm::max(t1, t2));
-
-					if (tmax >= tmin) {
-						// we intersected AABB
-						if (cur_node.tri_index != -1) {
-							// this is leaf node
-							// triangle intersection test
-							Tri tri = tris[cur_node.tri_index];
-
-
-							t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
-							if (t >= -0.0001f) {
-								P = r.ray.origin + t * r.ray.direction;
-
-								// barycentric coords
-								s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-									glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-									glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-								if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-									s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
-									t_min = t;
-									tmp_normal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
-									mat_id = tri.mat_ID;
-									// Check if surface is medium transition
-									if (IsMediumTransition(tri.mediumInterface)) {
-										isect.mediumInterface = tri.mediumInterface;
-									}
-									else {
-										isect.mediumInterface.inside = r.medium;
-										isect.mediumInterface.outside = r.medium;
-									}
-								}
-							}
-							// if last node in tree, we are done
-							if (stack_pointer == 0) {
-								break;
-							}
-							// otherwise need to check rest of the things in the stack
-							stack_pointer--;
-							cur_node_index = node_stack[stack_pointer];
-						}
-						else {
-							node_stack[stack_pointer] = cur_node.offset_to_second_child;
-							stack_pointer++;
-							cur_node_index++;
-						}
-					}
-					else {
-						// didn't intersect AABB, remove from stack
-						if (stack_pointer == 0) {
-							break;
-						}
-						stack_pointer--;
-						cur_node_index = node_stack[stack_pointer];
-					}
-				}
-			}
-#endif
-
 			for (int i = 0; i < geoms_size; ++i)
 			{
 				Geom& geom = geoms[i];
@@ -771,9 +641,14 @@ __global__ void computeVisVolumetric(
 					t = squareplaneIntersectionTest(geom, r.ray, tmp_normal);
 #endif
 				}
-				else {
+				else if (geom.type == CUBE) {
 #ifdef ENABLE_RECTS
 					t = boxIntersectionTest(geom, r.ray, tmp_normal);
+#endif
+				}
+				else if (geom.type == MESH) {
+#ifdef ENABLE_TRIS
+					t = lbvhIntersectionTest(pathSegments[path_index], lbvh, tris, r.ray, geom.triangleCount, tmp_normal, true);
 #endif
 				}
 
@@ -922,8 +797,6 @@ __global__ void surfaceSpawnPathSegment(
 			return;
 		}
 
-		//pathSegments[idx].accumulatedIrradiance += glm::vec3(0, 0, 1);
-
 		ShadeableIntersection intersection = intersections[idx];
 		MISLightIntersection direct_light_intersection = direct_light_isects[idx];
 
@@ -938,113 +811,15 @@ __global__ void surfaceSpawnPathSegment(
 			pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * direct_light_isects[idx].LTE; // TODO: * uniform sample one light;
 		}
 		glm::vec3 wi = glm::vec3(0.0f);
-		glm::vec3 f = glm::vec3(0.0f);
 		float pdf = 0.0f;
 		float absDot = 0.0f;
-
-		//thrust::uniform_real_distribution<float> u01(0, 1);
-
-		// Physically based BSDF sampling influenced by PBRT
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
-		// https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
-
-		if (m.type == SPEC_BRDF) {
-			wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = m.R;
-			}
-			else {
-				f = m.R / absDot;
-			}
-		}
-		else if (m.type == SPEC_BTDF) {
-			// spec refl
-			float eta = m.ior;
-			if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0001f) {
-				// outside
-				eta = 1.0f / eta;
-				wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-			}
-			else {
-				// inside
-				wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = 1.0f;
-			if (glm::length(wi) <= 0.0001f) {
-				// total internal reflection
-				f = glm::vec3(0.0f);
-			}
-			else if (absDot >= -0.0001f && absDot <= -0.0001f) {
-				f = m.T;
-			}
-			else {
-				f = m.T / absDot;
-			}
-		}
-		else if (m.type == SPEC_GLASS) {
-			// spec glass
-			float eta = m.ior;
-			if (u01(rng) < 0.5f) {
-				// spec refl
-				wi = glm::reflect(pathSegments[idx].ray.direction, intersection.surfaceNormal);
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (absDot == 0.0f) {
-					f = m.R;
-				}
-				else {
-					f = m.R / absDot;
-				}
-				f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
-			}
-			else {
-				// spec refr
-				if (glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction) < 0.0f) {
-					// outside
-					eta = 1.0f / eta;
-					wi = glm::refract(pathSegments[idx].ray.direction, intersection.surfaceNormal, eta);
-				}
-				else {
-					// inside
-					wi = glm::refract(pathSegments[idx].ray.direction, -intersection.surfaceNormal, eta);
-				}
-				absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-				pdf = 1.0f;
-				if (glm::length(wi) <= 0.0001f) {
-					// total internal reflection
-					f = glm::vec3(0.0f);
-				}
-				if (absDot == 0.0f) {
-					f = m.T;
-				}
-				else {
-					f = m.T / absDot;
-				}
-				f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, pathSegments[idx].ray.direction), m.ior);
-			}
-			f *= 2.0f;
-		}
-		else {
-			// diffuse
-			wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
-			if (m.type == DIFFUSE_BTDF) {
-				wi = -wi;
-			}
-			absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
-			pdf = absDot * 0.31831f;
-			f = m.R * 0.31831f;
-		}
-
+		glm::vec3 f = Sample_f(m, pathSegments[idx], intersection, &wi, &pdf, absDot, rng, u01);
 		pathSegments[idx].rayThroughput *= f * absDot / pdf;
 
 		// Change ray direction
 		pathSegments[idx].ray.direction = wi;
 		pathSegments[idx].ray.direction_inv = 1.0f / wi;
 		pathSegments[idx].ray.origin = intersect_point + (wi * 0.001f);
-		//pathSegments[idx].medium = intersection.mi.medium;
 		pathSegments[idx].medium = glm::dot(pathSegments[idx].ray.direction, intersection.surfaceNormal) > 0 ? intersection.mediumInterface.outside :
 			intersection.mediumInterface.inside;
 		pathSegments[idx].remainingBounces--;
@@ -1162,14 +937,8 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 	dim3 numblocksPathSegmentTracing = (pixelcount_vol + blockSize1d - 1) / blockSize1d;
 
 	// gen ray
-	thrust::default_random_engine rng = makeSeededRandomEngine_Vol(iter, iter, iter);
-	thrust::uniform_real_distribution<float> upixel(0.0, 1.0f);
-
-	float jitterX = upixel(rng);
-	float jitterY = upixel(rng);
-
 	generateRayFromCamera_Vol << <blocksPerGrid2d, blockSize2d >> > (cam,
-		iter, traceDepth, jitterX, jitterY, dev_paths);
+		iter, traceDepth, dev_paths);
 
 	while (!iterationComplete) {
 		//std::cout << "depth: " << depth << std::endl;
@@ -1186,7 +955,7 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 			, dev_media
 			, hst_scene->media.size()
 			, dev_intersections
-			, dev_bvh_nodes
+			, dev_lbvh
 			);
 
 		depth++;
@@ -1242,7 +1011,7 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 			dev_media,
 			hst_scene->media.size(),
 			dev_direct_light_isects,
-			dev_bvh_nodes,
+			dev_lbvh,
 			dev_media_density,
 			gui_params
 			);
@@ -1269,16 +1038,16 @@ void volPathtrace(uchar4* pbo, int frame, int iter, GuiParameters &gui_params) {
 			dev_media);
 		
 		// RUSSIAN ROULETTE
-		/*if (depth >= 5)
+		if (depth > 4)
 		{
 			russianRouletteKernel_Vol << <numblocksPathSegmentTracing, blockSize1d >> > (
 				iter,
 				pixelcount_vol,
 				dev_paths
 				);
-		}*/
+		}
 
-		if (depth == traceDepth + BOUNCE_PADDING) { iterationComplete = true; }
+		if (depth == traceDepth) { iterationComplete = true; }
 	}
 
 

@@ -18,6 +18,12 @@ enum IntegratorType {
     SURFACE_ONLY_MIS
 };
 
+enum ImportanceSampling {
+    UNI_NEE_MIS,
+    NEE,
+    UNI
+};
+
 enum MediumType {
     HOMOGENEOUS,
     HETEROGENEOUS,
@@ -78,50 +84,64 @@ struct Ray {
     glm::vec3 direction_inv;
 };
 
-struct TriBounds {
-    glm::vec3 AABB_min;
-    glm::vec3 AABB_max;
-    glm::vec3 AABB_centroid;
-    int tri_ID;
+struct MortonCode {
+    int objectId;
+    unsigned int code;
 };
 
-struct BVHNode {
-    glm::vec3 AABB_min;
-    glm::vec3 AABB_max;
-    BVHNode* child_nodes[2];
-    int split_axis;
-    int tri_index;
+struct NodeRange {
+    int i;
+    int j;
+    int l;
+    int d;
 };
 
-struct BVHNode_GPU {
-    glm::vec3 AABB_min;
-    glm::vec3 AABB_max;
-    int tri_index;
-    int offset_to_second_child;
+struct AABB {
+    glm::vec3 min;
+    glm::vec3 max;
+};
+
+struct LBVHNode {
+    AABB aabb;
+    int objectId;
+    unsigned int left;
+    unsigned int right;
 };
 
 struct Tri {
-    // positions
-    glm::vec3 p0;
-    glm::vec3 p1;
-    glm::vec3 p2;
-    // normals
-    glm::vec3 n0;
-    glm::vec3 n1;
-    glm::vec3 n2;
-    // uvs
-    glm::vec2 t0;
-    glm::vec2 t1;
-    glm::vec2 t2;
-    // plane normal
+    glm::vec3 verts[3];
+    glm::vec3 norms[3];
     glm::vec3 plane_normal;
+    glm::vec3 centroid;
     float S;
+    int objectId;
     int mat_ID;
     MediumInterface mediumInterface;
+    AABB aabb;
+
+    void computeAABB() {
+        aabb.min = glm::min(verts[0], glm::min(verts[1], verts[2]));
+        aabb.max = glm::max(verts[0], glm::max(verts[1], verts[2]));
+    }
+
+    void computeCentroid() {
+        centroid = (verts[0] + verts[1] + verts[2]) / glm::vec3(3.f, 3.f, 3.f);
+    }
+
+    void computePlaneNormal() {
+        plane_normal = glm::normalize(glm::cross(verts[1] - verts[0], verts[2] - verts[1]));
+    }
+
+    void computeArea() {
+        S = glm::length(glm::cross(verts[1] - verts[0], verts[2] - verts[1]));
+    }
 };
 
 struct Geom {
     enum GeomType type;
+    AABB aabb;
+    int startIdx;
+    int triangleCount;
     int materialid;
     glm::vec3 translation;
     glm::vec3 rotation;
@@ -168,25 +188,24 @@ struct RenderState {
 
 struct PathSegment {
     Ray ray;
-    Ray lastRealRay;
     glm::vec3 accumulatedIrradiance;
     glm::vec3 rayThroughput;
-    glm::vec3 r_u;
-    glm::vec3 r_l;
+    glm::vec3 p_uni;
+    glm::vec3 p_nee;
     thrust::default_random_engine rng_engine;
+    int pixelIndex;
     int remainingBounces;
-    int realPathLength;
     int medium;
+    int rgbWavelength;
     bool prev_hit_was_specular;
     bool prev_hit_null_material;
-    bool prev_event_was_real;
 };
 
 struct MISLightRay {
     Ray ray;
     glm::vec3 f;
-    glm::vec3 r_l;
-    glm::vec3 r_u;
+    glm::vec3 p_nee;
+    glm::vec3 p_uni;
     float pdf;
     int light_ID;
     int medium;
@@ -214,9 +233,22 @@ struct ShadeableIntersection {
 
 };
 
+struct SceneInfo {
+    int geoms_size;
+    int media_size;
+    int lights_size;
+};
+
 struct GuiParameters {
     glm::vec3 sigma_a;
     glm::vec3 sigma_s;
     float g;
+    int max_depth;
+    int depth_padding;
+    int refresh_rate;
+    int refresh_bit;
+    float density_offset;
+    float density_scale;
+    ImportanceSampling importance_sampling;
 };
 

@@ -9,6 +9,10 @@
 //#define USE_SCHLICK_APPROX
 #define EPSILON  0.00000001f
 
+#define INV_PI 0.31831f
+#define INV_PI2 0.159155f
+#define INV_PI4 0.079577f
+
 enum MediumEvent {
     ABSORB,
     REAL_SCATTER,
@@ -73,7 +77,7 @@ glm::vec3 calculateRandomDirectionInHemisphere(
 // and https://en.wikipedia.org/wiki/Schlick%27s_approximation
 // and https://en.wikipedia.org/wiki/Fresnel_equations
 
-inline __device__ glm::vec3 fresnelDielectric(float cos_theta_i, float etaT) {
+inline __host__ __device__ glm::vec3 fresnelDielectric(float cos_theta_i, float etaT) {
     
     // assume scene medium is air
     float etaI = 1.0f;
@@ -166,6 +170,116 @@ float Sample_p(const glm::vec3& wo, glm::vec3* wi, float* pdf, const glm::vec2& 
     return p;
 }
 
+inline __host__ __device__
+glm::vec3 Sample_f(
+    const Material& mat, 
+    const PathSegment& segment, 
+    const ShadeableIntersection& intersection, 
+    glm::vec3* wi, 
+    float* pdf,
+    float& absDot,
+    thrust::default_random_engine& rng,
+    thrust::uniform_real_distribution<float>& u01)
+{
+    // Physically based BSDF sampling influenced by PBRT
+    // https://www.pbr-book.org/3ed-2018/Reflection_Models/Specular_Reflection_and_Transmission
+    // https://www.pbr-book.org/3ed-2018/Reflection_Models/Lambertian_Reflection
+
+    glm::vec3 f = glm::vec3(0.0f);
+
+    if (mat.type == SPEC_BRDF) {
+        *wi = glm::reflect(segment.ray.direction, intersection.surfaceNormal);
+        absDot = glm::abs(glm::dot(intersection.surfaceNormal, *wi));
+        *pdf = 1.0f;
+        if (absDot >= -0.0001f && absDot <= -0.0001f) {
+            f = mat.R;
+        }
+        else {
+            f = mat.R / absDot;
+        }
+    }
+    else if (mat.type == SPEC_BTDF) {
+        // spec refl
+        float eta = mat.ior;
+        if (glm::dot(intersection.surfaceNormal, segment.ray.direction) < 0.0001f) {
+            // outside
+            eta = 1.0f / eta;
+            *wi = glm::refract(segment.ray.direction, intersection.surfaceNormal, eta);
+        }
+        else {
+            // inside
+            *wi = glm::refract(segment.ray.direction, -intersection.surfaceNormal, eta);
+        }
+        absDot = glm::abs(glm::dot(intersection.surfaceNormal, *wi));
+        *pdf = 1.0f;
+        if (glm::length(*wi) <= 0.0001f) {
+            // total internal reflection
+            f = glm::vec3(0.0f);
+        }
+        else if (absDot >= -0.0001f && absDot <= -0.0001f) {
+            f = mat.T;
+        }
+        else {
+            f = mat.T / absDot;
+        }
+    }
+    else if (mat.type == SPEC_GLASS) {
+        // spec glass
+        float eta = mat.ior;
+        if (u01(rng) < 0.5f) {
+            // spec refl
+            *wi = glm::reflect(segment.ray.direction, intersection.surfaceNormal);
+            absDot = glm::abs(glm::dot(intersection.surfaceNormal, *wi));
+            *pdf = 1.0f;
+            if (absDot == 0.0f) {
+                f = mat.R;
+            }
+            else {
+                f = mat.R / absDot;
+            }
+            f *= fresnelDielectric(glm::dot(intersection.surfaceNormal, segment.ray.direction), mat.ior);
+        }
+        else {
+            // spec refr
+            if (glm::dot(intersection.surfaceNormal, segment.ray.direction) < 0.0f) {
+                // outside
+                eta = 1.0f / eta;
+                *wi = glm::refract(segment.ray.direction, intersection.surfaceNormal, eta);
+            }
+            else {
+                // inside
+                *wi = glm::refract(segment.ray.direction, -intersection.surfaceNormal, eta);
+            }
+            absDot = glm::abs(glm::dot(intersection.surfaceNormal, *wi));
+            *pdf = 1.0f;
+            if (glm::length(*wi) <= 0.0001f) {
+                // total internal reflection
+                f = glm::vec3(0.0f);
+            }
+            if (absDot == 0.0f) {
+                f = mat.T;
+            }
+            else {
+                f = mat.T / absDot;
+            }
+            f *= glm::vec3(1.0f) - fresnelDielectric(glm::dot(intersection.surfaceNormal, segment.ray.direction), mat.ior);
+        }
+        f *= 2.0f;
+    }
+    else {
+        // diffuse
+        *wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+        if (mat.type == DIFFUSE_BTDF) {
+            *wi = -*wi;
+        }
+        absDot = glm::abs(glm::dot(intersection.surfaceNormal, *wi));
+        *pdf = absDot * 0.31831f;
+        f = mat.R * 0.31831f;
+    }
+
+    return f;
+}
+
 inline __host__ __device__ glm::vec3 getSigmaT(const Medium& medium, GuiParameters& gui_params) {
     return gui_params.sigma_a + gui_params.sigma_s;
 }
@@ -173,20 +287,14 @@ inline __host__ __device__ glm::vec3 getSigmaT(const Medium& medium, GuiParamete
 inline __host__ __device__ float D_heterogeneous(const Medium& medium, const nanovdb::NanoGrid<float>* media_density, glm::vec3 sample_index, PathSegment& segment)
 {
     // read density value from the grid
-    //glm::vec3 min_cell_index = glm::vec3(medium.index_min, -medium.gx * 0.5f, -medium.gx * 0.5f);
-    //glm::vec3 max_cell_index = glm::vec3(medium.gx * 0.5f, medium.gx * 0.5f, medium.gx * 0.5f);
     if (sample_index.x < medium.index_min.x || sample_index.x >= medium.index_max.x ||
         sample_index.y < medium.index_min.y || sample_index.y >= medium.index_max.y ||
         sample_index.z < medium.index_min.z || sample_index.z >= medium.index_max.z) {
-        //segment.accumulatedIrradiance += glm::vec3(1, 0, 0);
-        return 0;
+        return 0.0f;
     }
         
     auto gpuAcc = media_density->getAccessor();
     auto density = gpuAcc.getValue(nanovdb::Coord(sample_index.x, sample_index.y, sample_index.z));
-    /*if (glm::abs(density) < 0.001f) {
-        density = 0.0f;
-    }*/
     return (density >= 0.0f) ? density : -density;
 }
 
@@ -208,6 +316,11 @@ inline __host__ __device__ float Density_heterogeneous(const Medium& medium, con
     float d0 = glm::mix(d00, d10, d.y);
     float d1 = glm::mix(d01, d11, d.y);
     return glm::mix(d0, d1, d.z);
+}
+
+inline __host__ __device__ float Density_homogeneous(const Medium& medium)
+{
+    return medium.maxDensity;
 }
 
 inline __host__ __device__ glm::vec3 Tr_homogeneous(const Medium& medium, const Ray& ray, float t)
@@ -290,7 +403,6 @@ glm::vec3 Sample_homogeneous(
     glm::vec3 density = sampleMedium ? (medium.sigma_t * Tr) : Tr;
   
     // TODO: change this to account for pdfs of other spectral wavelengths...
-    // QUESTION: is pdf calculation correct?
     float pdf = density[0];
 
     return sampleMedium ? (Tr * medium.sigma_s / pdf) : (Tr / pdf);
@@ -324,7 +436,6 @@ glm::vec3 Sample_heterogeneous(
     if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t, false)) {
         return glm::vec3(1.0f);
     }
-    //segment.accumulatedIrradiance += glm::vec3(100, 0, 0);
 
     // Run delta tracking to sample medium interaction
     t = glm::max(tMin, 0.0f);
@@ -348,8 +459,6 @@ glm::vec3 Sample_heterogeneous(
         if (segment.remainingBounces == 0) {
             return glm::vec3(1.0f);
         }*/
-        
-        
     }
 
     return glm::vec3(1.0f);
@@ -388,6 +497,53 @@ void Sample_Li(
             pdf_L = 0.0f;
         }
     }
+}
+
+inline __host__ __device__
+glm::vec3 Sample_Li_EnvMap(
+    glm::vec3& wi,
+    float& pdf_L,
+    glm::vec3* env_map,
+    float* env_map_distribution,
+    int env_map_width,
+    int env_map_height,
+    float env_map_dist_sum,
+    PathSegment& segment,
+    ShadeableIntersection& intersection,
+    thrust::default_random_engine& rng,
+    thrust::uniform_real_distribution<float>& u01)
+{
+    if (segment.medium != 0) {
+        wi = glm::normalize(calculateRandomDirectionInHemisphere(intersection.surfaceNormal, rng, u01));
+        float absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+        pdf_L = absDot * 0.31831f;
+    }
+    else {
+        //wi = glm::normalize(calculateRandomDirectionInHemisphere(glm::normalize(segment.ray.direction), rng, u01));
+        //float absDot = glm::abs(glm::dot(glm::normalize(segment.ray.direction), wi));
+        //pdf_L = absDot * 0.31831f;
+        glm::vec2 rand_nums = glm::vec2(u01(rng), u01(rng));
+        glm::vec3 warped = glm::vec3(0, 0, 0);
+        warped.z = 1.0f - 2.0f * rand_nums[0];
+        float sqrtSample = glm::sqrt(1 - warped.z * warped.z);
+        warped.x = glm::cos(2.0f * M_PI * rand_nums[1]) * sqrtSample;
+        warped.y = glm::sin(2.0f * M_PI * rand_nums[1]) * sqrtSample;
+        wi = glm::normalize(warped);
+        pdf_L = 1.0f / INV_PI4;
+    }
+
+    
+    glm::vec3 w = glm::normalize(wi);
+
+    float phi = glm::atan(w.z, w.x);
+    if (phi < 0.0f) {
+        phi += TWO_PI;
+    }
+    float theta = glm::acos(w.y);
+    glm::vec2 st(1.0f - phi * INV_PI2, 1.0f - theta * INV_PI);
+    glm::vec2 pix(((float)(env_map_width)*st.x - 0.5f), (float)(env_map_height) * (1.0f - st.y) - 0.5f);
+
+   return env_map[env_map_width * (int)pix.y + (int)pix.x];
 }
 
 // function to randomly choose a light, randomly choose point on light, compute LTE with that random point, and generate ray for shadow casting
@@ -499,7 +655,7 @@ glm::vec3 computeDirectLightSamplePreVis(
 inline __host__ __device__
 glm::vec3 getMajorant(const Medium& medium, GuiParameters& gui_params)
 {
-    return medium.maxDensity * (gui_params.sigma_a + gui_params.sigma_s);
+    return ((medium.maxDensity + gui_params.density_offset) * gui_params.density_scale) * (gui_params.sigma_a + gui_params.sigma_s);
 }
 
 inline __host__ __device__
@@ -514,8 +670,14 @@ void getCoefficients(
     glm::vec3& null)
 {
     glm::vec3 localSamplePoint = glm::vec3(medium.worldToMedium * glm::vec4(samplePoint, 1.0));
-    float density = Density_heterogeneous(medium, media_density, localSamplePoint, segment);
-    //if (density <= 0.0001f) segment.accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
+    float density;
+    if (medium.type == HOMOGENEOUS) {
+        density = Density_homogeneous(medium);
+    }
+    else {
+        density = Density_heterogeneous(medium, media_density, localSamplePoint, segment);
+    }
+    density = (density + gui_params.density_offset) * gui_params.density_scale;
     scattering = density * glm::vec3(gui_params.sigma_s);
     absorption = density * glm::vec3(gui_params.sigma_a);
     null = getMajorant(medium, gui_params) - (scattering + absorption);
@@ -523,20 +685,20 @@ void getCoefficients(
 
 // This returns Tr
 inline __host__ __device__
-glm::vec3 Sample_channel_direct(
+glm::vec3 Sample_medium_direct(
     int idx,
     const Medium& medium,
     PathSegment& segment,
     const MISLightIntersection& isect,
     const nanovdb::NanoGrid<float>* media_density,
-    MISLightRay* direct_light_rays,
+    MISLightRay& direct_ray,
     float& ray_t,
     glm::vec3& T_ray,
     GuiParameters& gui_params,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
 {
-    Ray worldRay = direct_light_rays[idx].ray;
+    Ray worldRay = direct_ray.ray;
 
     Ray localRay;
     localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
@@ -551,35 +713,58 @@ glm::vec3 Sample_channel_direct(
         return glm::vec3(1.0f);
     }
 
-    int channel = 0;
+    glm::vec3 Tr_majorant = glm::vec3(1.0f);
+    int channel = segment.rgbWavelength;
     tMin = glm::max(tMin, 0.0f);
-    t = tMin - glm::log(1.0f - u01(rng)) / getMajorant(medium, gui_params)[channel];
-    bool sampleMedium = t < tMax;
-    t = glm::min(t, tMax);
 
-    glm::vec3 T_maj = glm::vec3(1.0f);
+    while (true) {
+        t = tMin - glm::log(1.0f - u01(rng)) / getMajorant(medium, gui_params)[channel];
+        bool sampleMedium = t < tMax;
+        t = glm::min(t, tMax);
 
-    if (sampleMedium) {
-        ray_t = t;
-        glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
+        if (sampleMedium) {
+            ray_t = t;
+            glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
 
-        T_maj = glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
-        glm::vec3 scattering, absorption, null;
-        getCoefficients(media_density, gui_params, medium, samplePoint, segment, scattering, absorption, null);
-        glm::vec3 majorant = getMajorant(medium, gui_params);
+            Tr_majorant *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
+            glm::vec3 scattering, absorption, null;
+            getCoefficients(media_density, gui_params, medium, samplePoint, segment, scattering, absorption, null);
+            glm::vec3 majorant = getMajorant(medium, gui_params);
 
-        float pdf = T_maj[0] * majorant[channel];
-        if (pdf < EPSILON) {
-            return glm::vec3(0.0f);
+            float pdf = Tr_majorant[channel] * majorant[channel];
+            //if (pdf < EPSILON) {
+            //    return glm::vec3(0.0f);
+            //}
+            T_ray *= Tr_majorant * null / pdf;
+            direct_ray.p_nee *= Tr_majorant * majorant / pdf;
+            direct_ray.p_uni *= Tr_majorant * null / pdf;
+
+            glm::vec3 Tr = T_ray / (direct_ray.p_nee + direct_ray.p_uni);
+
+            // russian roulette ray termination for direct lighting
+            float maxChannel = glm::max(Tr.x, glm::max(Tr.y, Tr.z));
+            if (maxChannel < 0.05f) {
+                if (u01(rng) < 0.75f)
+                    T_ray = glm::vec3(0.0f);
+                else
+                    T_ray /= 0.25f;
+            }
+
+            if (glm::length(T_ray) < 0.0001f) {
+                return glm::vec3(1.0f);
+            }
+
+            tMin = t;
+            Tr_majorant = glm::vec3(1.0f);
         }
-        T_ray *= T_maj * null / pdf;
-        direct_light_rays[idx].r_l *= T_maj * majorant / pdf;
-        direct_light_rays[idx].r_u *= T_maj * null / pdf;
+        else {
+            Tr_majorant *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
+            if (glm::length(Tr_majorant) < 0.0001f) {
+                return glm::vec3(1.0f);
+            }
 
-        return T_maj;
-    }
-    else {
-        return glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
+            return Tr_majorant;
+        }
     }
 }
 
@@ -587,26 +772,20 @@ glm::vec3 Sample_channel_direct(
 inline __host__ __device__
 glm::vec3 computeVisibility(
     int idx,
-    PathSegment* pathSegments,
+    PathSegment& segment,
     Geom* geoms,
-    int geoms_size,
     Tri* tris,
-    int tris_size,
     Medium* media,
-    int media_size,
     const nanovdb::NanoGrid<float>* media_density,
-    MISLightRay* direct_light_rays,
-    MISLightIntersection* direct_light_isects,
+    MISLightRay& direct_ray,
+    MISLightIntersection& direct_isect,
     Light* lights,
-    int num_lights,
-    BVHNode_GPU* bvh_nodes,
+    LBVHNode* lbvh,
     GuiParameters& gui_params,
+    SceneInfo& scene_info,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01)
 {
-    MISLightRay& r = direct_light_rays[idx];
-    MISLightIntersection& isect = direct_light_isects[idx];
-
     glm::vec3 T_ray = glm::vec3(1.0f);
 
     int num_iters = 0;
@@ -620,108 +799,21 @@ glm::vec3 computeVisibility(
         glm::vec3 tmp_normal;
         int mat_id = -1;
 
-        if (tris_size != 0) {
-            int stack_pointer = 0;
-            int cur_node_index = 0;
-            int node_stack[32];
-            BVHNode_GPU cur_node;
-            glm::vec3 P;
-            glm::vec3 s;
-            float t1;
-            float t2;
-            float tmin;
-            float tmax;
-            while (true) {
-                cur_node = bvh_nodes[cur_node_index];
-
-                // (ray-aabb test node)
-                t1 = (cur_node.AABB_min.x - r.ray.origin.x) * r.ray.direction_inv.x;
-                t2 = (cur_node.AABB_max.x - r.ray.origin.x) * r.ray.direction_inv.x;
-
-                tmin = glm::min(t1, t2);
-                tmax = glm::max(t1, t2);
-
-                t1 = (cur_node.AABB_min.y - r.ray.origin.y) * r.ray.direction_inv.y;
-                t2 = (cur_node.AABB_max.y - r.ray.origin.y) * r.ray.direction_inv.y;
-
-                tmin = glm::max(tmin, glm::min(t1, t2));
-                tmax = glm::min(tmax, glm::max(t1, t2));
-
-                t1 = (cur_node.AABB_min.z - r.ray.origin.z) * r.ray.direction_inv.z;
-                t2 = (cur_node.AABB_max.z - r.ray.origin.z) * r.ray.direction_inv.z;
-
-                tmin = glm::max(tmin, glm::min(t1, t2));
-                tmax = glm::min(tmax, glm::max(t1, t2));
-
-                if (tmax >= tmin) {
-                    // we intersected AABB
-                    if (cur_node.tri_index != -1) {
-                        // this is leaf node
-                        // triangle intersection test
-                        Tri tri = tris[cur_node.tri_index];
-
-
-                        t = glm::dot(tri.plane_normal, (tri.p0 - r.ray.origin)) / glm::dot(tri.plane_normal, r.ray.direction);
-                        if (t >= -0.0001f) {
-                            P = r.ray.origin + t * r.ray.direction;
-
-                            // barycentric coords
-                            s = glm::vec3(glm::length(glm::cross(P - tri.p1, P - tri.p2)),
-                                glm::length(glm::cross(P - tri.p2, P - tri.p0)),
-                                glm::length(glm::cross(P - tri.p0, P - tri.p1))) / tri.S;
-
-                            if (s.x >= -0.0001f && s.x <= 1.0001f && s.y >= -0.0001f && s.y <= 1.0001f &&
-                                s.z >= -0.0001f && s.z <= 1.0001f && (s.x + s.y + s.z <= 1.0001f) && (s.x + s.y + s.z >= -0.0001f) && t_min > t) {
-                                t_min = t;
-                                tmp_normal = glm::normalize(s.x * tri.n0 + s.y * tri.n1 + s.z * tri.n2);
-                                mat_id = tri.mat_ID;
-                                // Check if surface is medium transition
-                                if (IsMediumTransition(tri.mediumInterface)) {
-                                    isect.mediumInterface = tri.mediumInterface;
-                                }
-                                else {
-                                    isect.mediumInterface.inside = r.medium;
-                                    isect.mediumInterface.outside = r.medium;
-                                }
-                            }
-                        }
-                        // if last node in tree, we are done
-                        if (stack_pointer == 0) {
-                            break;
-                        }
-                        // otherwise need to check rest of the things in the stack
-                        stack_pointer--;
-                        cur_node_index = node_stack[stack_pointer];
-                    }
-                    else {
-                        node_stack[stack_pointer] = cur_node.offset_to_second_child;
-                        stack_pointer++;
-                        cur_node_index++;
-                    }
-                }
-                else {
-                    // didn't intersect AABB, remove from stack
-                    if (stack_pointer == 0) {
-                        break;
-                    }
-                    stack_pointer--;
-                    cur_node_index = node_stack[stack_pointer];
-                }
-            }
-        }
-
-        for (int i = 0; i < geoms_size; ++i)
+        for (int i = 0; i < scene_info.geoms_size; ++i)
         {
             Geom& geom = geoms[i];
 
             if (geom.type == SPHERE) {
-                t = sphereIntersectionTest(geom, r.ray, tmp_normal);
+                t = sphereIntersectionTest(geom, direct_ray.ray, tmp_normal);
             }
             else if (geom.type == SQUAREPLANE) {
-                t = squareplaneIntersectionTest(geom, r.ray, tmp_normal);
+                t = squareplaneIntersectionTest(geom, direct_ray.ray, tmp_normal);
             }
-            else {
-                t = boxIntersectionTest(geom, r.ray, tmp_normal);
+            else if (geom.type == CUBE) {
+                t = boxIntersectionTest(geom, direct_ray.ray, tmp_normal);
+            }
+            else if (geom.type == MESH) {
+                t = lbvhIntersectionTest(segment, lbvh, tris, direct_ray.ray, geom.triangleCount, tmp_normal, false);
             }
 
             if (t_min > t)
@@ -732,49 +824,50 @@ glm::vec3 computeVisibility(
 
                 // Check if surface is medium transition
                 if (IsMediumTransition(geom.mediumInterface)) {
-                    isect.mediumInterface = geom.mediumInterface;
+                    direct_isect.mediumInterface = geom.mediumInterface;
                 }
                 else {
-                    isect.mediumInterface.inside = r.medium;
-                    isect.mediumInterface.outside = r.medium;
+                    direct_isect.mediumInterface.inside = direct_ray.medium;
+                    direct_isect.mediumInterface.outside = direct_ray.medium;
                 }
             }
         }
 
-        for (int j = 0; j < media_size; j++) {
-            if (media[j].type == HOMOGENEOUS) continue;
+        if (scene_info.media_size > 0) {
+            for (int j = 0; j < scene_info.media_size; j++) {
+                if (media[j].type == HOMOGENEOUS) continue;
 
-            const Medium& medium = media[j];
-            bool intersectAABB = aabbIntersectionTest(pathSegments[idx], medium.aabb_min, medium.aabb_max, r.ray, tMin, tMax, t, false);
+                const Medium& medium = media[j];
+                bool intersectAABB = aabbIntersectionTest(segment, medium.aabb_min, medium.aabb_max, direct_ray.ray, tMin, tMax, t, false);
 
-            if (intersectAABB && t_min > t) {
-                t_min = t;
-                obj_ID = -2;
-                mat_id = -1;
+                if (intersectAABB && t_min > t) {
+                    t_min = t;
+                    obj_ID = -2;
+                    mat_id = -1;
 
-                // TODO: change this to handle more advanced cases
-                isect.mediumInterface.inside = j;
-                isect.mediumInterface.outside = -1;
+                    // TODO: change this to handle more advanced cases
+                    direct_isect.mediumInterface.inside = j;
+                    direct_isect.mediumInterface.outside = -1;
+                }
             }
         }
-
+        
         // if we did not intersect an object or intersected object is not a "invisible" bounding box, the ray is occluded
-        if (obj_ID == -1 || (obj_ID != -1 && obj_ID != r.light_ID && mat_id != -1)) {
+        if ((obj_ID == -1 && direct_ray.light_ID != -1) || (obj_ID != -1 && obj_ID != direct_ray.light_ID && mat_id != -1)) {
             num_iters++;
             return glm::vec3(0.0f);
         }
 
         // if the current ray has a medium, then attenuate throughput based on transmission and distance traveled
-        if (r.medium != -1) {
-            if (media[r.medium].type == HOMOGENEOUS) {
-                T_ray *= Tr_homogeneous(media[r.medium], r.ray, t_min);
+        if (direct_ray.medium != -1) {
+            if (media[direct_ray.medium].type == HOMOGENEOUS) {
+                T_ray *= Tr_homogeneous(media[direct_ray.medium], direct_ray.ray, t_min);
             }
             else {
-                //Tr *= Tr_heterogeneous(media[r.medium], pathSegments[idx], r, media_density, t_min, rng, u01);
-                glm::vec3 T_maj = Sample_channel_direct(idx, media[r.medium], pathSegments[idx], isect, media_density, direct_light_rays, t_min, T_ray, gui_params, rng, u01);
-                T_ray *= T_maj / T_maj[0];
-                direct_light_rays[idx].r_l *= T_maj / T_maj[0];
-                direct_light_rays[idx].r_u *= T_maj / T_maj[0];
+                glm::vec3 Tr_majorant = Sample_medium_direct(idx, media[direct_ray.medium], segment, direct_isect, media_density, direct_ray, t_min, T_ray, gui_params, rng, u01);
+                T_ray *= Tr_majorant / Tr_majorant[segment.rgbWavelength];
+                direct_ray.p_nee *= Tr_majorant / Tr_majorant[segment.rgbWavelength];
+                direct_ray.p_uni *= Tr_majorant / Tr_majorant[segment.rgbWavelength];
             }
         }
 
@@ -783,20 +876,19 @@ glm::vec3 computeVisibility(
         }
 
         // if the intersected object IS the light source we selected, we are done
-        if (obj_ID == r.light_ID) {
+        if (obj_ID == direct_ray.light_ID) {
             num_iters++;
             return T_ray;
         }
 
         num_iters++;
         // We encountered a bounding box/entry/exit of a volume, so we must change our medium value, update the origin, and traverse again
-        glm::vec3 old_origin = r.ray.origin;
-        r.ray.origin = old_origin + (r.ray.direction * (t_min + 0.001f));
+        direct_ray.ray.origin = direct_ray.ray.origin + (direct_ray.ray.direction * (t_min + 0.001f));
 
         // TODO: generalize to support both homogeneous and heterogeneous volumes
         /*r.medium = glm::dot(r.ray.direction, tmp_normal) > 0 ? isect.mediumInterface.outside :
             isect.mediumInterface.inside;*/
-        r.medium = insideMedium(pathSegments[idx], tMin, tMax, num_iters) ? isect.mediumInterface.inside : isect.mediumInterface.outside;
+        direct_ray.medium = insideMedium(segment, tMin, tMax, num_iters) ? direct_isect.mediumInterface.inside : direct_isect.mediumInterface.outside;
     }
 }
 
@@ -804,90 +896,133 @@ glm::vec3 computeVisibility(
 inline __host__ __device__
 glm::vec3 directLightSample(
     int idx,
-    PathSegment* pathSegments,
+    bool is_medium,
+    PathSegment& segment,
     Material* materials,
     ShadeableIntersection& intersection,
     Geom* geoms,
-    int geoms_size,
     Tri* tris,
-    int tris_size,
     Medium* media,
-    int media_size,
     const nanovdb::NanoGrid<float>* media_density,
-    MISLightRay* direct_light_rays,
-    MISLightIntersection* direct_light_isects,
+    MISLightRay& direct_ray,
+    MISLightIntersection& direct_isect,
     Light* lights,
-    int num_lights,
-    BVHNode_GPU* bvh_nodes,
+    LBVHNode* lbvh,
+    glm::vec3* env_map,
+    float* env_map_distribution,
+    int env_map_width,
+    int env_map_height,
+    float env_map_dist_sum,
     GuiParameters& gui_params,
+    SceneInfo& scene_info,
     thrust::default_random_engine& rng,
     thrust::uniform_real_distribution<float>& u01) 
 {
     // calculate point on surface or medium from which the light ray should originate
-    glm::vec3 intersect_point = pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction;
+    glm::vec3 intersect_point = segment.ray.origin + intersection.t * segment.ray.direction;
     if (intersection.mi.medium >= 0) {
         intersect_point = intersection.mi.samplePoint;
     }
 
-    // choose light to directly sample
-    direct_light_rays[idx].light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)num_lights)), num_lights - 1)].geom_ID;
-    Geom& light = geoms[direct_light_rays[idx].light_ID];
-    Material& light_material = materials[light.materialid];
-
-    // get light wi direction and pdf
     glm::vec3 wi = glm::vec3(0.0f);
     float pdf_L = 0.0f;
-    Sample_Li(light, intersect_point, wi, pdf_L, rng, u01);
+    Material light_material;
 
-    // store direct light ray information for visibility testing
-    direct_light_rays[idx].ray.origin = intersect_point + (wi * 0.001f);
-    direct_light_rays[idx].ray.direction = wi;
-    direct_light_rays[idx].ray.direction_inv = 1.0f / wi;
-    direct_light_rays[idx].medium = pathSegments[idx].medium;
-    direct_light_rays[idx].r_l = glm::vec3(1.0f);
-    direct_light_rays[idx].r_u = glm::vec3(1.0f);
+    // choose light to directly sample
+    direct_ray.light_ID = lights[glm::min((int)(glm::floor(u01(rng) * (float)scene_info.lights_size)), scene_info.lights_size - 1)].geom_ID;
 
+    if (direct_ray.light_ID == -1) {
+        // sample environment map
 
-    // evaluate phase function for light sample direction
-    float p = evaluatePhaseHG(intersection.mi.wo, wi, media[intersection.mi.medium].g, gui_params.g);
-    float phase_pdf = p;
-
-    if (phase_pdf < EPSILON) {
-        direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-        return glm::vec3(0.0f);
-    }
-
-    direct_light_rays[idx].f = glm::vec3(p);
-    
-    if (pdf_L < EPSILON) {
-        direct_light_isects[idx].LTE = glm::vec3(0.0f, 0.0f, 0.0f);
-        return glm::vec3(0.0f);
+        glm::vec3 env_color = Sample_Li_EnvMap(wi, pdf_L, env_map, env_map_distribution, env_map_width, env_map_height, env_map_dist_sum, segment, intersection, rng, u01);
+        light_material = { env_color, glm::vec3(0.0f), DIFFUSE_BRDF, 0.0f, 1.0f };
     }
     else {
-        direct_light_isects[idx].LTE = (float)num_lights * light_material.emittance * light_material.R * direct_light_rays[idx].f;
+        // sample area light
+
+        Geom& light = geoms[direct_ray.light_ID];
+        light_material = materials[light.materialid];
+
+        Sample_Li(light, intersect_point, wi, pdf_L, rng, u01);
+    }
+
+
+    // store direct light ray information for visibility testing
+    direct_ray.ray.origin = intersect_point + (wi * 0.001f);
+    direct_ray.ray.direction = wi;
+    direct_ray.ray.direction_inv = 1.0f / wi;
+    direct_ray.medium = segment.medium;
+    direct_ray.p_nee = glm::vec3(1.0f);
+    direct_ray.p_uni = glm::vec3(1.0f);
+
+    float pdf_B = 0.0f;
+
+    // Surface interaction
+    if (!is_medium) {
+        Material& material = materials[intersection.materialId];
+        float absDot = glm::abs(glm::dot(intersection.surfaceNormal, wi));
+
+        pdf_B = absDot * 0.31831f;
+        direct_ray.f = material.R * 0.31831f; // INV_PI
+
+        // LTE = f * Li * absDot / pdf
+        if (pdf_L < 0.00001f) {
+            direct_isect.LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+            return glm::vec3(0.0f);
+        }
+        else if (pdf_B < 0.00001f) {
+            direct_isect.LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+            return glm::vec3(0.0f);
+        }
+        else {
+            direct_isect.LTE = light_material.emittance * light_material.R * direct_ray.f * absDot;
+        }
+    }
+    // Medium interaction
+    else {
+        // evaluate phase function for light sample direction
+        float p = evaluatePhaseHG(intersection.mi.wo, wi, media[intersection.mi.medium].g, gui_params.g);
+        pdf_B = p;
+
+        if (pdf_B < EPSILON) {
+            direct_isect.LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+            return glm::vec3(0.0f);
+        }
+
+        direct_ray.f = glm::vec3(p);
+
+        if (pdf_L < EPSILON) {
+            direct_isect.LTE = glm::vec3(0.0f, 0.0f, 0.0f);
+            return glm::vec3(0.0f);
+        }
+        else {
+            direct_isect.LTE = light_material.emittance * light_material.R * direct_ray.f;
+        }
     }
 
     // compute visibility
-    glm::vec3 T_ray = computeVisibility(idx, pathSegments, geoms, geoms_size, tris, tris_size, media, media_size, media_density,
-        direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
-    
-    direct_light_rays[idx].r_l *= pathSegments[idx].r_u * pdf_L / (float)num_lights;
-    direct_light_rays[idx].r_u *= pathSegments[idx].r_u * phase_pdf;
-    
-    direct_light_isects[idx].LTE *= T_ray / (direct_light_rays[idx].r_l + direct_light_rays[idx].r_u);
-    //direct_light_isects[idx].LTE *= T_ray / (pdf_L);
-    return direct_light_isects[idx].LTE;
+    glm::vec3 T_ray = computeVisibility(idx, segment, geoms, tris, media, media_density,
+        direct_ray, direct_isect, lights, lbvh, gui_params, scene_info, rng, u01);
+ 
+    if (gui_params.importance_sampling == NEE) {
+        direct_isect.LTE *= T_ray * (float)scene_info.lights_size / pdf_L;
+    }
+    else if (gui_params.importance_sampling == UNI_NEE_MIS) {
+        direct_ray.p_nee *= segment.p_uni * pdf_L / (float)scene_info.lights_size;
+        direct_ray.p_uni *= segment.p_uni * pdf_B;
+
+        direct_isect.LTE *= T_ray / (direct_ray.p_nee + direct_ray.p_uni);
+    }
+    return direct_isect.LTE;
 }
 
 inline __host__ __device__
 MediumEvent sampleMediumEvent(float pAbsorb, float pScatter, float pNull, float rng_val) {
     if (pAbsorb > rng_val) {
-    //if (0.4f > rng_val) {
         return ABSORB;
     }
 
     if (pScatter + pAbsorb > rng_val) {
-    //if (0.7f > rng_val) {
         return REAL_SCATTER;
     }
 
@@ -896,23 +1031,37 @@ MediumEvent sampleMediumEvent(float pAbsorb, float pScatter, float pNull, float 
 
 // This returns Tr
 inline __host__ __device__
-glm::vec3 Sample_channel(
-    int max_depth,
-    const Medium& medium,
-    PathSegment& segment,
-    const ShadeableIntersection& isect,
-    MediumInteraction* mi,
-    const nanovdb::NanoGrid<float>* media_density,
+glm::vec3 Sample_medium(
+    int path_index,
     int mediumIndex,
-    GuiParameters & gui_params,
+    PathSegment& segment,
+    ShadeableIntersection& isect,
+    MISLightRay& direct_light_ray,
+    MISLightIntersection& direct_light_isect,
+    Geom* geoms,
+    Tri* tris,
+    Light* lights,
+    Medium* media,
+    Material* materials,
+    MediumInteraction* mi,
+    LBVHNode* lbvh,
+    const nanovdb::NanoGrid<float>* media_density,
+    glm::vec3* env_map,
+    float* env_map_distribution,
+    int env_map_width,
+    int env_map_height,
+    float env_map_dist_sum,
+    GuiParameters& gui_params,
+    SceneInfo& scene_info,
     thrust::default_random_engine& rng,
-    thrust::uniform_real_distribution<float>& u01)
+    thrust::uniform_real_distribution<float>& u01,
+    bool& scattered)
 {
     Ray worldRay = segment.ray;
 
     Ray localRay;
-    localRay.origin = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.origin, 1.0f));
-    localRay.direction = glm::vec3(medium.worldToMedium * glm::vec4(worldRay.direction, 0.0f));
+    localRay.origin = glm::vec3(media[mediumIndex].worldToMedium * glm::vec4(worldRay.origin, 1.0f));
+    localRay.direction = glm::vec3(media[mediumIndex].worldToMedium * glm::vec4(worldRay.direction, 0.0f));
     localRay.direction_inv = 1.0f / localRay.direction;
 
     // Compute tmin and tmax of ray overlap with medium bounds
@@ -922,142 +1071,153 @@ glm::vec3 Sample_channel(
     if (!aabbIntersectionTest(segment, localBBMin, localBBMax, localRay, tMin, tMax, t, false)) {
         return glm::vec3(1.0f);
     }
-    int channel = 0;
+
+    glm::vec3 Tr_majorant = glm::vec3(1.0f);
+    int channel = segment.rgbWavelength;
     tMin = glm::max(tMin, 0.0f);
-    t = tMin - glm::log(1.0f - u01(rng)) / getMajorant(medium, gui_params)[channel];
-    bool sampleMedium = t < tMax;
-    t = glm::min(t, tMax);
-    if (sampleMedium) {
-        glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
-        mi->samplePoint = samplePoint;
-        mi->wo = -worldRay.direction;
-        mi->medium = mediumIndex;
-    }
 
-    return glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
-}
+    while (true) {
+        t = tMin - glm::log(1.0f - u01(rng)) / getMajorant(media[mediumIndex], gui_params)[channel];
+        bool sampleMedium = t < tMax;
+        t = glm::min(t, tMax);
 
-inline __host__ __device__
-bool handleMediumInteraction(
-    int idx,
-    int max_depth,
-    const glm::vec3 T_maj, 
-    PathSegment* pathSegments,
-    Material* materials,
-    ShadeableIntersection& isect,
-    const MediumInteraction& mi,
-    Geom* geoms,
-    int geoms_size,
-    Tri* tris,
-    int tris_size,
-    Medium* media,
-    int media_size,
-    const nanovdb::NanoGrid<float>* media_density,
-    MISLightRay* direct_light_rays,
-    MISLightIntersection* direct_light_isects,
-    Light* lights,
-    int num_lights,
-    BVHNode_GPU* bvh_nodes,
-    GuiParameters& gui_params,
-    thrust::default_random_engine& rng,
-    thrust::uniform_real_distribution<float>& u01)
-{
-    int heroChannel = 0;
+        if (sampleMedium) {
+            glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
 
-    glm::vec3 scattering, absorption, null;
-    getCoefficients(media_density, gui_params, media[mi.medium], mi.samplePoint, pathSegments[idx], scattering, absorption, null);
-    
-    glm::vec3 majorant = getMajorant(media[mi.medium], gui_params);
-    float pAbsorb = absorption[heroChannel] / majorant[heroChannel];
-    float pScatter = scattering[heroChannel] / majorant[heroChannel];
-    float pNull = 1.0f - pAbsorb - pScatter;
+            Tr_majorant *= glm::exp(-getMajorant(media[mediumIndex], gui_params) * (t - tMin));
 
-    // choose a medium event to sample (absorption, real scattering, or null scattering
-    MediumEvent eventType = sampleMediumEvent(pAbsorb, pScatter, pNull, u01(rng));
+            // Set medium properties
+            mi->samplePoint = samplePoint;
+            mi->wo = -worldRay.direction;
+            mi->medium = mediumIndex;
+            isect.mi = *mi;
 
-    if (eventType == ABSORB) {
-        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-        //pathSegments[idx].accumulatedIrradiance += glm::vec3(1.0, 0.0, 0.0);
-        pathSegments[idx].remainingBounces = 0;
-        return false;
-    }
-    else if (eventType == NULL_SCATTER) {
-        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
-        // TODO: maybe decrement remaining bounces
-        //pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 1.0, 0.0);
-        pathSegments[idx].prev_event_was_real = false;
-        float pdf = T_maj[heroChannel] * null[heroChannel];
-        if (pdf < EPSILON) {
-            pathSegments[idx].rayThroughput = glm::vec3(0.0f);
-            return false;
-        }
-        else {
-            pathSegments[idx].rayThroughput *= T_maj * null / pdf;
-            pathSegments[idx].r_u *= T_maj * null / pdf;
-            pathSegments[idx].r_l *= T_maj * majorant / pdf;
-            pathSegments[idx].ray.origin = mi.samplePoint;
-        }
+            // Handle medium interaction
+            //int heroChannel = 0;
 
-        if (glm::length(pathSegments[idx].rayThroughput) <= 0.00001f || glm::length(pathSegments[idx].r_u) <= 0.00001f) {
-            //pathSegments[idx].accumulatedIrradiance += glm::vec3(20, 0, 0);
-            pathSegments[idx].remainingBounces = 0;
-            return false;
-        }
-        else {
-            //pathSegments[idx].remainingBounces--;
-        }
-        return true;
-    }
-    else {
-        //if (pathSegments[idx].remainingBounces == 1) pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
-        //pathSegments[idx].accumulatedIrradiance += glm::vec3(0.0, 0.0, 1.0);
-        pathSegments[idx].prev_event_was_real = true;
-        pathSegments[idx].realPathLength++;
+            glm::vec3 scattering, absorption, null;
+            getCoefficients(media_density, gui_params, media[mi->medium], mi->samplePoint, segment, scattering, absorption, null);
 
-        // Stop after reaching max depth
-        if (pathSegments[idx].remainingBounces <= 0) {
-            pathSegments[idx].remainingBounces = 0;
-            return false;
-        }
+            glm::vec3 majorant = getMajorant(media[mi->medium], gui_params);
+            float pAbsorb = absorption[channel] / majorant[channel];
+            float pScatter = scattering[channel] / majorant[channel];
+            float pNull = 1.0f - pAbsorb - pScatter;
 
-        float pdf = T_maj[heroChannel] * scattering[heroChannel];
-        if (pdf < EPSILON) {
-            pathSegments[idx].remainingBounces = 0;
-            return false;
-        }
-        pathSegments[idx].rayThroughput *= T_maj * scattering / pdf;
-        pathSegments[idx].r_u *= T_maj * scattering / pdf;
+            // choose a medium event to sample (absorption, real scattering, or null scattering
+            MediumEvent eventType = sampleMediumEvent(pAbsorb, pScatter, pNull, u01(rng));
 
-        bool sampleLight = (glm::length(pathSegments[idx].rayThroughput) > EPSILON || glm::length(pathSegments[idx].r_u) > EPSILON);
-        if (sampleLight) {
-            // Direct light sampling
-            glm::vec3 Ld = directLightSample(idx, pathSegments, materials, isect, geoms, geoms_size, tris, tris_size,
-                media, media_size, media_density, direct_light_rays, direct_light_isects, lights, num_lights, bvh_nodes, gui_params, rng, u01);
-            pathSegments[idx].accumulatedIrradiance += pathSegments[idx].rayThroughput * Ld;
+            if (eventType == ABSORB) {
+                segment.remainingBounces = 0;
+                return glm::vec3(1.0f);
+            }
+            else if (eventType == NULL_SCATTER) {
+                float pdf = Tr_majorant[channel] * null[channel];
+                if (pdf < EPSILON) {
+                    segment.rayThroughput = glm::vec3(0.0f);
+                    return glm::vec3(1.0f);
+                }
+                else {
+                    segment.rayThroughput *= Tr_majorant * null / pdf;
+                    segment.p_uni *= Tr_majorant * null / pdf;
+                    segment.p_nee *= Tr_majorant * majorant / pdf;
+                    //pathSegments[path_index].ray.origin = mi->samplePoint;
+                }
 
-            // Sample phase function
-            glm::vec3 phase_wi;
-            float phase_pdf = 0.f;
-            float phase_p = Sample_p(-pathSegments[idx].ray.direction, &phase_wi, &phase_pdf, glm::vec2(u01(rng), u01(rng)), media[pathSegments[idx].medium].g, gui_params.g);
-            if (phase_pdf < EPSILON) {
-                pathSegments[idx].remainingBounces = 0;
-                return false;
+                if (glm::length(segment.rayThroughput) <= 0.00001f || glm::length(segment.p_uni) <= 0.00001f) {
+                    return glm::vec3(1.0f);
+                }
+            }
+            else {
+                // Stop after reaching max depth
+                if (segment.remainingBounces <= 0) {
+                    segment.remainingBounces = 0;
+                    return glm::vec3(1.0f);
+                }
+
+
+
+                float pdf = Tr_majorant[channel] * scattering[channel];
+                if (pdf < EPSILON) {
+                    segment.remainingBounces = 0;
+                    return glm::vec3(1.0f);
+                }
+                segment.rayThroughput *= Tr_majorant * scattering / pdf;
+                segment.p_uni *= Tr_majorant * scattering / pdf;
+
+                bool sampleLight = (glm::length(segment.rayThroughput) > EPSILON && glm::length(segment.p_uni) > EPSILON);
+                if (sampleLight) {
+                    // Direct light sampling
+                    if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
+                        // Direct light sampling
+                        glm::vec3 Ld = directLightSample(path_index, true, segment, materials, isect, geoms, tris,
+                          media, media_density, direct_light_ray, direct_light_isect, lights, lbvh, 
+                          env_map,
+                          env_map_distribution,
+                          env_map_width,
+                          env_map_height,
+                          env_map_dist_sum,
+                          gui_params, scene_info, rng, u01);
+
+                        segment.accumulatedIrradiance += segment.rayThroughput * Ld;
+                    }
+
+                    // Sample phase function
+                    glm::vec3 phase_wi;
+                    float phase_pdf = 0.f;
+                    float phase_p = Sample_p(-segment.ray.direction, &phase_wi, &phase_pdf, glm::vec2(u01(rng), u01(rng)), media[segment.medium].g, gui_params.g);
+                    if (phase_pdf < EPSILON) {
+                        segment.remainingBounces = 0;
+                        return glm::vec3(1.0f);
+                    }
+
+                    // Update ray segment
+                    segment.rayThroughput *= phase_p / phase_pdf;
+                    segment.p_nee = segment.p_uni / phase_pdf;
+                    segment.ray.direction = phase_wi;
+                    segment.ray.direction_inv = 1.0f / phase_wi;
+                    segment.ray.origin = mi->samplePoint + phase_wi * 0.001f;
+                    segment.medium = mi->medium;
+                    segment.remainingBounces--;
+                    scattered = true;
+                }
+                else {
+                    segment.remainingBounces = 0;
+                }
+                return glm::vec3(1.0f);
             }
 
-            // Update ray segment
-            pathSegments[idx].rayThroughput *= phase_p / phase_pdf;
-            pathSegments[idx].r_l = pathSegments[idx].r_u / phase_pdf;
-            pathSegments[idx].ray.direction = phase_wi;
-            pathSegments[idx].ray.direction_inv = 1.0f / phase_wi;
-            pathSegments[idx].ray.origin = mi.samplePoint;
-            pathSegments[idx].medium = mi.medium;
-            pathSegments[idx].remainingBounces--;
-
-            return true;
+            tMin = t;
+            Tr_majorant = glm::vec3(1.0f);
         }
         else {
-            pathSegments[idx].remainingBounces = 0;
-            return false;
-        }       
+            // Set medium properties
+            mi->medium = -1;
+            isect.mi = *mi;
+            Tr_majorant *= glm::exp(-getMajorant(media[mediumIndex], gui_params) * (t - tMin));
+            if (glm::length(Tr_majorant) < 0.0001f) {
+                return glm::vec3(1.0f);
+            }
+
+            return Tr_majorant;
+        }
     }
+}
+
+
+
+inline __host__ __device__
+glm::vec3 sunsetGradient(glm::vec3 wi) {
+    wi = glm::normalize(wi);
+    float t = (wi.y + 1.0f) * 0.5;
+    t *= 0.5f;
+
+
+    glm::vec3 a(1.138f, 0.508f, 0.618f);
+    glm::vec3 b(0.428f, 0.018f, 0.208f);
+    glm::vec3 c(1.568f, 0.718f, 1.898f);
+    glm::vec3 d(-0.852f, -0.222f, 0.558f);
+    return (a + b * glm::cos(6.28318f * (c * t + d))) * 0.75f;
+
+    //return glm::mix(glm::vec3(1, 0, 0), glm::vec3(0, 0, 1), t);
+
 }
