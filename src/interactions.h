@@ -685,7 +685,7 @@ void getCoefficients(
 
 // This returns Tr
 inline __host__ __device__
-glm::vec3 Sample_channel_direct(
+glm::vec3 Sample_medium_direct(
     int idx,
     const Medium& medium,
     PathSegment& segment,
@@ -713,7 +713,7 @@ glm::vec3 Sample_channel_direct(
         return glm::vec3(1.0f);
     }
 
-    glm::vec3 T_maj = glm::vec3(1.0f);
+    glm::vec3 Tr_majorant = glm::vec3(1.0f);
     int channel = segment.rgbWavelength;
     tMin = glm::max(tMin, 0.0f);
 
@@ -726,26 +726,28 @@ glm::vec3 Sample_channel_direct(
             ray_t = t;
             glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
 
-            T_maj *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
+            Tr_majorant *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
             glm::vec3 scattering, absorption, null;
             getCoefficients(media_density, gui_params, medium, samplePoint, segment, scattering, absorption, null);
             glm::vec3 majorant = getMajorant(medium, gui_params);
 
-            float pdf = T_maj[channel] * majorant[channel];
+            float pdf = Tr_majorant[channel] * majorant[channel];
             //if (pdf < EPSILON) {
             //    return glm::vec3(0.0f);
             //}
-            T_ray *= T_maj * null / pdf;
-            direct_ray.r_l *= T_maj * majorant / pdf;
-            direct_ray.r_u *= T_maj * null / pdf;
+            T_ray *= Tr_majorant * null / pdf;
+            direct_ray.p_nee *= Tr_majorant * majorant / pdf;
+            direct_ray.p_uni *= Tr_majorant * null / pdf;
 
-            glm::vec3 Tr = T_ray / (direct_ray.r_l + direct_ray.r_u);
-            if (glm::max(Tr.x, glm::max(Tr.y, Tr.z)) < 0.05f) {
-                float q = 0.75f;
-                if (u01(rng) < q)
+            glm::vec3 Tr = T_ray / (direct_ray.p_nee + direct_ray.p_uni);
+
+            // russian roulette ray termination for direct lighting
+            float maxChannel = glm::max(Tr.x, glm::max(Tr.y, Tr.z));
+            if (maxChannel < 0.05f) {
+                if (u01(rng) < 0.75f)
                     T_ray = glm::vec3(0.0f);
                 else
-                    T_ray /= 1.0f - q;
+                    T_ray /= 0.25f;
             }
 
             if (glm::length(T_ray) < 0.0001f) {
@@ -753,15 +755,15 @@ glm::vec3 Sample_channel_direct(
             }
 
             tMin = t;
-            T_maj = glm::vec3(1.0f);
+            Tr_majorant = glm::vec3(1.0f);
         }
         else {
-            T_maj *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
-            if (glm::length(T_maj) < 0.0001f) {
+            Tr_majorant *= glm::exp(-getMajorant(medium, gui_params) * (t - tMin));
+            if (glm::length(Tr_majorant) < 0.0001f) {
                 return glm::vec3(1.0f);
             }
 
-            return T_maj;
+            return Tr_majorant;
         }
     }
 }
@@ -862,10 +864,10 @@ glm::vec3 computeVisibility(
                 T_ray *= Tr_homogeneous(media[direct_ray.medium], direct_ray.ray, t_min);
             }
             else {
-                glm::vec3 T_maj = Sample_channel_direct(idx, media[direct_ray.medium], segment, direct_isect, media_density, direct_ray, t_min, T_ray, gui_params, rng, u01);
-                T_ray *= T_maj / T_maj[segment.rgbWavelength];
-                direct_ray.r_l *= T_maj / T_maj[segment.rgbWavelength];
-                direct_ray.r_u *= T_maj / T_maj[segment.rgbWavelength];
+                glm::vec3 Tr_majorant = Sample_medium_direct(idx, media[direct_ray.medium], segment, direct_isect, media_density, direct_ray, t_min, T_ray, gui_params, rng, u01);
+                T_ray *= Tr_majorant / Tr_majorant[segment.rgbWavelength];
+                direct_ray.p_nee *= Tr_majorant / Tr_majorant[segment.rgbWavelength];
+                direct_ray.p_uni *= Tr_majorant / Tr_majorant[segment.rgbWavelength];
             }
         }
 
@@ -950,8 +952,8 @@ glm::vec3 directLightSample(
     direct_ray.ray.direction = wi;
     direct_ray.ray.direction_inv = 1.0f / wi;
     direct_ray.medium = segment.medium;
-    direct_ray.r_l = glm::vec3(1.0f);
-    direct_ray.r_u = glm::vec3(1.0f);
+    direct_ray.p_nee = glm::vec3(1.0f);
+    direct_ray.p_uni = glm::vec3(1.0f);
 
     float pdf_B = 0.0f;
 
@@ -1006,10 +1008,10 @@ glm::vec3 directLightSample(
         direct_isect.LTE *= T_ray * (float)scene_info.lights_size / pdf_L;
     }
     else if (gui_params.importance_sampling == UNI_NEE_MIS) {
-        direct_ray.r_l *= segment.r_u * pdf_L / (float)scene_info.lights_size;
-        direct_ray.r_u *= segment.r_u * pdf_B;
+        direct_ray.p_nee *= segment.p_uni * pdf_L / (float)scene_info.lights_size;
+        direct_ray.p_uni *= segment.p_uni * pdf_B;
 
-        direct_isect.LTE *= T_ray / (direct_ray.r_l + direct_ray.r_u);
+        direct_isect.LTE *= T_ray / (direct_ray.p_nee + direct_ray.p_uni);
     }
     return direct_isect.LTE;
 }
@@ -1029,7 +1031,7 @@ MediumEvent sampleMediumEvent(float pAbsorb, float pScatter, float pNull, float 
 
 // This returns Tr
 inline __host__ __device__
-glm::vec3 Sample_channel(
+glm::vec3 Sample_medium(
     int path_index,
     int mediumIndex,
     PathSegment& segment,
@@ -1070,7 +1072,7 @@ glm::vec3 Sample_channel(
         return glm::vec3(1.0f);
     }
 
-    glm::vec3 T_maj = glm::vec3(1.0f);
+    glm::vec3 Tr_majorant = glm::vec3(1.0f);
     int channel = segment.rgbWavelength;
     tMin = glm::max(tMin, 0.0f);
 
@@ -1082,7 +1084,7 @@ glm::vec3 Sample_channel(
         if (sampleMedium) {
             glm::vec3 samplePoint = worldRay.origin + t * worldRay.direction;
 
-            T_maj *= glm::exp(-getMajorant(media[mediumIndex], gui_params) * (t - tMin));
+            Tr_majorant *= glm::exp(-getMajorant(media[mediumIndex], gui_params) * (t - tMin));
 
             // Set medium properties
             mi->samplePoint = samplePoint;
@@ -1109,19 +1111,19 @@ glm::vec3 Sample_channel(
                 return glm::vec3(1.0f);
             }
             else if (eventType == NULL_SCATTER) {
-                float pdf = T_maj[channel] * null[channel];
+                float pdf = Tr_majorant[channel] * null[channel];
                 if (pdf < EPSILON) {
                     segment.rayThroughput = glm::vec3(0.0f);
                     return glm::vec3(1.0f);
                 }
                 else {
-                    segment.rayThroughput *= T_maj * null / pdf;
-                    segment.r_u *= T_maj * null / pdf;
-                    segment.r_l *= T_maj * majorant / pdf;
+                    segment.rayThroughput *= Tr_majorant * null / pdf;
+                    segment.p_uni *= Tr_majorant * null / pdf;
+                    segment.p_nee *= Tr_majorant * majorant / pdf;
                     //pathSegments[path_index].ray.origin = mi->samplePoint;
                 }
 
-                if (glm::length(segment.rayThroughput) <= 0.00001f || glm::length(segment.r_u) <= 0.00001f) {
+                if (glm::length(segment.rayThroughput) <= 0.00001f || glm::length(segment.p_uni) <= 0.00001f) {
                     return glm::vec3(1.0f);
                 }
             }
@@ -1134,15 +1136,15 @@ glm::vec3 Sample_channel(
 
 
 
-                float pdf = T_maj[channel] * scattering[channel];
+                float pdf = Tr_majorant[channel] * scattering[channel];
                 if (pdf < EPSILON) {
                     segment.remainingBounces = 0;
                     return glm::vec3(1.0f);
                 }
-                segment.rayThroughput *= T_maj * scattering / pdf;
-                segment.r_u *= T_maj * scattering / pdf;
+                segment.rayThroughput *= Tr_majorant * scattering / pdf;
+                segment.p_uni *= Tr_majorant * scattering / pdf;
 
-                bool sampleLight = (glm::length(segment.rayThroughput) > EPSILON && glm::length(segment.r_u) > EPSILON);
+                bool sampleLight = (glm::length(segment.rayThroughput) > EPSILON && glm::length(segment.p_uni) > EPSILON);
                 if (sampleLight) {
                     // Direct light sampling
                     if (gui_params.importance_sampling == NEE || gui_params.importance_sampling == UNI_NEE_MIS) {
@@ -1170,7 +1172,7 @@ glm::vec3 Sample_channel(
 
                     // Update ray segment
                     segment.rayThroughput *= phase_p / phase_pdf;
-                    segment.r_l = segment.r_u / phase_pdf;
+                    segment.p_nee = segment.p_uni / phase_pdf;
                     segment.ray.direction = phase_wi;
                     segment.ray.direction_inv = 1.0f / phase_wi;
                     segment.ray.origin = mi->samplePoint + phase_wi * 0.001f;
@@ -1185,71 +1187,37 @@ glm::vec3 Sample_channel(
             }
 
             tMin = t;
-            T_maj = glm::vec3(1.0f);
+            Tr_majorant = glm::vec3(1.0f);
         }
         else {
             // Set medium properties
             mi->medium = -1;
             isect.mi = *mi;
-            T_maj *= glm::exp(-getMajorant(media[mediumIndex], gui_params) * (t - tMin));
-            if (glm::length(T_maj) < 0.0001f) {
+            Tr_majorant *= glm::exp(-getMajorant(media[mediumIndex], gui_params) * (t - tMin));
+            if (glm::length(Tr_majorant) < 0.0001f) {
                 return glm::vec3(1.0f);
             }
 
-            return T_maj;
+            return Tr_majorant;
         }
     }
 }
 
-// 3D Worley Noise implementation
-
-inline __host__ __device__
-glm::vec3 random3D_to_3D_worley(glm::vec3 input_vals) {
-        return glm::fract(
-            glm::sin(
-                glm::vec3(
-                    glm::dot(
-                        input_vals, glm::vec3(194.38f, 598.45f, 638.345f)
-                    ),
-                    glm::dot(
-                        input_vals, glm::vec3(276.5f, 921.53f, 732.34f)
-                    ),
-                    glm::dot(
-                        input_vals, glm::vec3(129.63f, 690.69f, 403.35f)
-                    )
-                )
-            ) * 39483.3569f
-        );
-    }
 
 
 inline __host__ __device__
-float worley3D(glm::vec3 p, float freq) {
-        // scale input by freq to increase size of grid
-        p *= freq;
+glm::vec3 sunsetGradient(glm::vec3 wi) {
+    wi = glm::normalize(wi);
+    float t = (wi.y + 1.0f) * 0.5;
+    t *= 0.5f;
 
-        glm::vec3 p_floor = glm::floor(p);
-        glm::vec3 p_fract = glm::fract(p);
-        float min_d = 1.0f;
 
-        // look for closest voronoi centroid point in 3x3x3 grid around current position
-        for (int z = -1; z <= 1; ++z) {
-            for (int y = -1; y <= 1; ++y) {
-                for (int x = -1; x <= 1; ++x) {
+    glm::vec3 a(1.138f, 0.508f, 0.618f);
+    glm::vec3 b(0.428f, 0.018f, 0.208f);
+    glm::vec3 c(1.568f, 0.718f, 1.898f);
+    glm::vec3 d(-0.852f, -0.222f, 0.558f);
+    return (a + b * glm::cos(6.28318f * (c * t + d))) * 0.75f;
 
-                    glm::vec3 this_neighbor = glm::vec3((float)x, (float)y, (float)z);
+    //return glm::mix(glm::vec3(1, 0, 0), glm::vec3(0, 0, 1), t);
 
-                    // voronoi centroid
-                    glm::vec3 neighbor_point = random3D_to_3D_worley(p_floor + this_neighbor);
-
-                    glm::vec3 diff = this_neighbor + neighbor_point - p_fract;
-
-                    float d = glm::length(diff);
-
-                    min_d = glm::min(min_d, d);
-                }
-            }
-        }
-
-        return min_d;
-    }
+}

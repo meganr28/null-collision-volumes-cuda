@@ -74,31 +74,10 @@ int Scene::loadEnvironmentMap(string file_name) {
     cudaMalloc(&dev_environment_map, texture->xSize * texture->ySize * sizeof(glm::vec3));
     cudaMemcpy(dev_environment_map, texture->pixels, texture->xSize * texture->ySize * sizeof(glm::vec3), cudaMemcpyHostToDevice);
 
-
-    float filter = 1.0f / glm::max(env_map_width, env_map_height);
-    float* distrib(new float[env_map_width * env_map_height]);
-    env_map_dist_sum = 0.0f;
-    for (int v = 0; v < env_map_height; ++v) {
-        //float vp = (float)v / (float)env_map_height;
-        float sinTheta = glm::sin(PI * ((float)v + 0.5f) / (float)env_map_height);
-        for (int u = 0; u < env_map_width; ++u) {
-            //float up = (float)u / (float)env_map_width;
-
-            glm::vec3 pixel_color = texture->pixels[env_map_width * (int)v + (int)u];
-            distrib[u + v * env_map_width] = pixel_color.r * 0.212671f + pixel_color.g * 0.715160f + pixel_color.b * 0.072169f;
-            distrib[u + v * env_map_width] *= sinTheta;
-            env_map_dist_sum += distrib[u + v * env_map_width];
-        }
-    }
-
-    cudaMalloc(&dev_env_map_distribution, texture->xSize * texture->ySize * sizeof(float));
-    cudaMemcpy(dev_env_map_distribution, distrib, texture->xSize * texture->ySize * sizeof(float), cudaMemcpyHostToDevice);
-
     Light newLight;
     newLight.geom_ID = -1;
     lights.push_back(newLight);
 
-    delete distrib;
     delete texture;
     return 1;
 }

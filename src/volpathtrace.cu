@@ -256,8 +256,8 @@ __global__ void generateRayFromCamera_Vol(Camera cam, int iter, int traceDepth,
 		segment.ray.origin = cam.position;
 		segment.rng_engine = makeSeededRandomEngine_Vol(iter, index, traceDepth);
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
-		segment.r_u = glm::vec3(1.0f, 1.0f, 1.0f);
-		segment.r_l = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.p_uni = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.p_nee = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;

@@ -1,0 +1,237 @@
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	1 1 10
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Diffuse white
+MATERIAL 1
+R_COLOR        	10 1 1
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Diffuse red
+MATERIAL 2
+R_COLOR        	1 10 1
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Diffuse green
+MATERIAL 3
+R_COLOR        	1 10 10
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Specular white
+MATERIAL 4
+R_COLOR        	10 1 10
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Specular white
+MATERIAL 5
+R_COLOR        	10 10 1
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Specular white
+MATERIAL 6
+R_COLOR        	10 4 1
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Specular white
+MATERIAL 7
+R_COLOR        	4 10 1
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Specular white
+MATERIAL 8
+R_COLOR        	1 4 10
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	90
+
+// Specular white
+MATERIAL 9
+R_COLOR        	0.8 0.76 0.81
+T_COLOR     	0 0 0
+SPEC_BRDF
+IOR    			0
+EMITTANCE   	0
+
+ENVMAP ../scenes/textures/environment_maps/Milkyway/Milkyway_small.hdr
+
+// Heterogeneous medium
+MEDIUM 0
+heterogeneous
+../scenes/vdb/embergen_building_implosion_a_115.vdb
+ABSORPTION 0.0002
+SCATTERING 0.0013
+ASYM_G     .001
+
+// Camera
+CAMERA
+RES         1920 1080
+FOVY        19.5
+ITERATIONS  10000
+DEPTH       4
+FILE        cornell
+FOCAL_DISTANCE	17.9
+LENS_RADIUS		0.0
+MEDIUM      -1
+EYE         -500 5.0 450
+LOOKAT      -500 5 0
+UP          0 1 0
+
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+mediuminterface -1 -1
+TRANS       -500 500 -100
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 1
+squareplane
+material 1
+mediuminterface -1 -1
+TRANS       -700 500 -100
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 2
+squareplane
+material 2
+mediuminterface -1 -1
+TRANS       -300 500 -100
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 3
+squareplane
+material 3
+mediuminterface -1 -1
+TRANS       -500 500 -300
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 4
+squareplane
+material 4
+mediuminterface -1 -1
+TRANS       -500 500 100
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 5
+squareplane
+material 5
+mediuminterface -1 -1
+TRANS       -300 500 100
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 6
+squareplane
+material 6
+mediuminterface -1 -1
+TRANS       -700 500 100
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 7
+squareplane
+material 7
+mediuminterface -1 -1
+TRANS       -700 500 -300
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 8
+squareplane
+material 8
+mediuminterface -1 -1
+TRANS       -300 500 -300
+ROTAT       90 0 0
+SCALE       40 40 1
+
+// Ceiling light
+OBJECT 9
+sphere
+material 9
+mediuminterface -1 -1
+TRANS       -350 0 50
+ROTAT       0 0 0
+SCALE       40 40 40
+
+// Ceiling light
+OBJECT 10
+sphere
+material 9
+mediuminterface -1 -1
+TRANS       -650 -100 50
+ROTAT       0 0 0
+SCALE       50 50 50
+
+// Ceiling light
+OBJECT 11
+sphere
+material 9
+mediuminterface -1 -1
+TRANS       -550 200 -300
+ROTAT       0 0 0
+SCALE       80 80 80
+
+// Ceiling light
+OBJECT 12
+sphere
+material 9
+mediuminterface -1 -1
+TRANS       -200 -200 -150
+ROTAT       0 0 0
+SCALE       150 150 150
+
+// Ceiling light
+OBJECT 13
+sphere
+material 9
+mediuminterface -1 -1
+TRANS       -800 200 -100
+ROTAT       0 0 0
+SCALE       200 200 200
+
+
+
+
+
+
+

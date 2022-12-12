@@ -190,8 +190,8 @@ struct PathSegment {
     Ray ray;
     glm::vec3 accumulatedIrradiance;
     glm::vec3 rayThroughput;
-    glm::vec3 r_u;
-    glm::vec3 r_l;
+    glm::vec3 p_uni;
+    glm::vec3 p_nee;
     thrust::default_random_engine rng_engine;
     int pixelIndex;
     int remainingBounces;
@@ -204,8 +204,8 @@ struct PathSegment {
 struct MISLightRay {
     Ray ray;
     glm::vec3 f;
-    glm::vec3 r_l;
-    glm::vec3 r_u;
+    glm::vec3 p_nee;
+    glm::vec3 p_uni;
     float pdf;
     int light_ID;
     int medium;

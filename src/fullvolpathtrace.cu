@@ -59,18 +59,6 @@ void checkCUDAErrorFn_FullVol(const char* msg, const char* file, int line) {
 #endif
 }
 
-//PerformanceTimer& timer()
-//{
-//	static PerformanceTimer timer;
-//	return timer;
-//}
-//
-//template<typename T>
-//void printElapsedTime(T time, std::string note = "")
-//{
-//	std::cout << "   elapsed time: " << time << "ms    " << note << std::endl;
-//}
-
 __host__ __device__
 thrust::default_random_engine makeSeededRandomEngine_FullVol(int iter, int index, int depth) {
 	int h = utilhash((1 << 31) | (depth << 22) | iter) ^ utilhash(index);
@@ -128,9 +116,6 @@ void fullVolPathtraceInit(Scene* scene) {
 	cudaMalloc(&dev_geoms, scene->geoms.size() * sizeof(Geom));
 	cudaMemcpy(dev_geoms, scene->geoms.data(), scene->geoms.size() * sizeof(Geom), cudaMemcpyHostToDevice);
 
-	/*cudaMalloc(&dev_tris, scene->num_tris * sizeof(Tri));
-	cudaMemcpy(dev_tris, scene->mesh_tris_sorted.data(), scene->num_tris * sizeof(Tri), cudaMemcpyHostToDevice);*/
-
 	cudaMalloc(&dev_tris, scene->triangles.size() * sizeof(Tri));
 	cudaMemcpy(dev_tris, scene->triangles.data(), scene->triangles.size() * sizeof(Tri), cudaMemcpyHostToDevice);
 
@@ -152,11 +137,6 @@ void fullVolPathtraceInit(Scene* scene) {
 	// Copy NanoVDB grid to the GPU
 	scene->gridHandle.deviceUpload();
 	dev_media_density = scene->gridHandle.deviceGrid<float>();
-	//grid_test_kernel <<< 1, 64 >>> (dev_media_density);
-	
-	// Copy NanoVDB grid to the GPU asynchronously (for later)
-	//cudaStreamCreate(&media_stream);
-	//scene->gridHandle.deviceUpload(media_stream, false);
 	
 	// FOR LIGHT SAMPLED MIS RAY
 	cudaMalloc(&dev_direct_light_rays, pixelcount_fullvol * sizeof(MISLightRay));
@@ -240,8 +220,8 @@ __global__ void generateRayFromThinLensCamera_FullVol(Camera cam, int iter, int 
 		segment.ray.origin = thinLensCamOrigin;
 		segment.rng_engine = makeSeededRandomEngine_FullVol(iter, index, traceDepth);
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
-		segment.r_u = glm::vec3(1.0f, 1.0f, 1.0f);
-		segment.r_l = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.p_uni = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.p_nee = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
@@ -280,8 +260,8 @@ __global__ void generateRayFromCamera_FullVol(Camera cam, int iter, int traceDep
 		segment.ray.origin = cam.position;
 		segment.rng_engine = makeSeededRandomEngine_FullVol(iter, index, traceDepth);
 		segment.rayThroughput = glm::vec3(1.0f, 1.0f, 1.0f);
-		segment.r_u = glm::vec3(1.0f, 1.0f, 1.0f);
-		segment.r_l = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.p_uni = glm::vec3(1.0f, 1.0f, 1.0f);
+		segment.p_nee = glm::vec3(1.0f, 1.0f, 1.0f);
 		segment.accumulatedIrradiance = glm::vec3(0.0f, 0.0f, 0.0f);
 		segment.prev_hit_was_specular = false;
 		segment.prev_hit_null_material = false;
@@ -437,58 +417,18 @@ __global__ void computeIntersections_FullVol(
 		if (isect.t >= MAX_INTERSECT_DIST) {
 			// hits nothing
 			if (env_map_width != 0) {
-				glm::vec3 w = glm::normalize(r.direction);
+				glm::vec3 wo = glm::normalize(r.direction);
 
-				float phi = glm::atan(w.z, w.x);
+				float phi = glm::atan(wo.z, wo.x);
 				if (phi < 0.0f) {
 					phi += TWO_PI;
 				}
-				float theta = glm::acos(w.y);
-				glm::vec2 st(1.0f - phi * INV_PI2, 1.0f - theta * INV_PI);
-				glm::vec2 pix(((float)(env_map_width) * st.x - 0.5f), (float)(env_map_height) * (1.0f - st.y) - 0.5f);
+				float theta = glm::acos(wo.y);
+				glm::vec2 uv(1.0f - phi * INV_PI2, 1.0f - theta * INV_PI);
+				glm::vec2 pix(((float)(env_map_width) * uv.x - 0.5f), (float)(env_map_height) * (1.0f - uv.y) - 0.5f);
 
 				glm::vec3 env_map_color = env_map[env_map_width * (int)pix.y + (int)pix.x];
-				float env_map_pdf = env_map_distribution[env_map_width * (int)pix.y + (int)pix.x];
-				//env_map_color = glm::vec3(env_map_pdf, env_map_pdf, env_map_pdf);
-				//pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color * 5.0f;
-
-				// PBRT v3 version
-				/*if (pathSegments[path_index].remainingBounces == 0 || pathSegments[path_index].prev_hit_was_specular) {
-					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / pathSegments[path_index].r_u;
-				}
-				else {
-					float pdf_L = 0.0f;
-					float sinTheta = glm::sin(theta);
-
-					if (glm::abs(sinTheta) > 0.0f) {
-						float pdf_L = env_map_pdf / (env_map_dist_sum * (float)env_map_width * (float)env_map_height);
-
-						pdf_L *= 1.0f / (2 * PI * PI * sinTheta);
-						pdf_L *= 1.0f / (float)num_lights;
-						pathSegments[path_index].r_l *= pdf_L;
-						pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / (pathSegments[path_index].r_u + pathSegments[path_index].r_l);
-					}
-
-				}*/
-
-				if (pathSegments[path_index].remainingBounces == gui_params.max_depth || pathSegments[path_index].prev_hit_was_specular) {
-					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / pathSegments[path_index].r_u;
-				}
-				else {
-					float pdf_L;
-
-					if (pathSegments[path_index].medium == -1) {
-						float absDot = glm::abs(glm::dot(intersections[path_index].surfaceNormal, r.direction));
-						pdf_L = absDot * 0.31831f;
-					}
-					else {
-						pdf_L = 1.0f / INV_PI4;
-					}
-
-					pdf_L *= 1.0f / (float)scene_info.lights_size;
-					pathSegments[path_index].r_l *= pdf_L;
-					pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color / (pathSegments[path_index].r_u + pathSegments[path_index].r_l);
-				}
+				pathSegments[path_index].accumulatedIrradiance += pathSegments[path_index].rayThroughput * env_map_color * 5.0f;
 
 			}
 			pathSegments[path_index].remainingBounces = 0;
@@ -536,14 +476,14 @@ __global__ void sampleParticipatingMedium_FullVol(
 		int rayMediumIndex = segment.medium;
 		MediumInteraction mi;
 		mi.medium = -1;
-		glm::vec3 T_maj;
+		glm::vec3 Tr;
 		bool scattered = false;
 		if (rayMediumIndex >= 0) {
 			if (media[rayMediumIndex].type == HOMOGENEOUS) {
 				segment.rayThroughput *= Sample_homogeneous(media[rayMediumIndex], segment, intersections[idx], &mi, rayMediumIndex, u01(rng));
 			}
 			else {
-				T_maj = Sample_channel(
+				Tr = Sample_medium(
 					idx,
 					rayMediumIndex, 
 					pathSegments[idx], 
@@ -575,9 +515,9 @@ __global__ void sampleParticipatingMedium_FullVol(
 		}
 
 		if (rayMediumIndex >= 0) {
-			segment.rayThroughput *= T_maj / T_maj[segment.rgbWavelength];
-			segment.r_l *= T_maj / T_maj[segment.rgbWavelength];
-			segment.r_u *= T_maj / T_maj[segment.rgbWavelength];
+			segment.rayThroughput *= Tr / Tr[segment.rgbWavelength];
+			segment.p_nee *= Tr / Tr[segment.rgbWavelength];
+			segment.p_uni *= Tr / Tr[segment.rgbWavelength];
 		}
 	}
 }
@@ -641,7 +581,7 @@ __global__ void handleSurfaceInteraction_FullVol(
 		if (material.emittance > 0.0f) {
 			if (pathSegments[idx].remainingBounces == gui_params.max_depth || pathSegments[idx].prev_hit_was_specular) {
 				// only color lights on first hit
-				pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pathSegments[idx].r_u;
+				pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / pathSegments[idx].p_uni;
 			}
 			else {
 				if (glm::dot(intersection.surfaceNormal, glm::normalize(pathSegments[idx].ray.direction)) > 0.0001f) {
@@ -662,8 +602,8 @@ __global__ void handleSurfaceInteraction_FullVol(
 						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput;
 					}
 					else if (gui_params.importance_sampling == UNI_NEE_MIS) {
-						pathSegments[idx].r_l *= pdf_L;
-						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].r_u + pathSegments[idx].r_l);
+						pathSegments[idx].p_nee *= pdf_L;
+						pathSegments[idx].accumulatedIrradiance += (material.R * material.emittance) * pathSegments[idx].rayThroughput / (pathSegments[idx].p_uni + pathSegments[idx].p_nee);
 					}
 				}
 			}
@@ -698,7 +638,7 @@ __global__ void handleSurfaceInteraction_FullVol(
 
 
 		// Change ray direction
-		pathSegments[idx].r_l = pathSegments[idx].r_u / pdf;
+		pathSegments[idx].p_nee = pathSegments[idx].p_uni / pdf;
 		pathSegments[idx].ray.origin = (pathSegments[idx].ray.origin + intersection.t * pathSegments[idx].ray.direction) + (wi * 0.001f);
 		pathSegments[idx].ray.direction = wi;
 		pathSegments[idx].ray.direction_inv = 1.0f / wi;

@@ -44,14 +44,14 @@ heterogeneous
 ../scenes/vdb/smoke.vdb
 ABSORPTION 0.02
 SCATTERING 0.2061
-ASYM_G     0.001
+ASYM_G     .001
 
 // Camera
 CAMERA
 RES         800 800 
 FOVY        19.5
-ITERATIONS  20
-DEPTH       1
+ITERATIONS  21
+DEPTH       3
 FILE        cornell
 FOCAL_DISTANCE	17.9
 LENS_RADIUS		0.0

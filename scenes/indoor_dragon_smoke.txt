@@ -1,0 +1,120 @@
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	10 6 9
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	50
+
+// Diffuse white
+MATERIAL 1
+R_COLOR         0.1 0.1 0.1
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse red
+MATERIAL 2
+R_COLOR         0.24 0.65 0.61
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse green
+MATERIAL 3
+R_COLOR         0.84 0.15 0.11
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 4
+R_COLOR         0.75 0.71 0.68
+T_COLOR     	0.85 0.81 0.78
+SPEC_BRDF
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 5
+R_COLOR         0.9 0.0 0.0
+T_COLOR     	0.85 0.81 0.78
+DIFFUSE_BRDF
+IOR    			1.55
+EMITTANCE   	0
+
+// Heterogeneous medium
+MEDIUM 0
+heterogeneous
+../scenes/vdb/dustshockwave_0075.vdb
+ABSORPTION 0.02
+SCATTERING 0.3
+ASYM_G     .001
+
+// Camera
+CAMERA
+RES         640 360
+FOVY        19.5
+ITERATIONS  5000
+DEPTH       1
+FILE        cornell
+FOCAL_DISTANCE	17.9
+LENS_RADIUS		0.0
+MEDIUM      -1
+EYE         0.0 0.0 600
+LOOKAT      0 -20 0
+UP          0 1 0
+
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+mediuminterface -1 -1
+TRANS       0 500 0
+ROTAT       90 0 0
+SCALE       200 200 1
+
+// Back Wall
+OBJECT 1
+squareplane
+material 2
+mediuminterface -1 -1
+TRANS       0 -25 -900
+ROTAT       0 0 0
+SCALE       1700 1500 1700
+
+// Left wall
+OBJECT 2
+squareplane
+material 3
+mediuminterface -1 -1
+TRANS       -750 2.5 0
+ROTAT       0 90 0
+SCALE       1700 1500 1700
+
+// Right wall
+OBJECT 3
+squareplane
+material 3
+mediuminterface -1 -1
+TRANS       750 2.5 0
+ROTAT       0 270 0
+SCALE       1700 1500 1700
+
+// Pedestal
+OBJECT 4
+cube
+material 1
+mediuminterface -1 -1
+TRANS       0 -400 -750
+ROTAT       270 0 0
+SCALE       500 500 500
+
+
+
+
+

@@ -283,7 +283,7 @@ void mainLoop() {
 		// Draw imgui
 		int display_w, display_h;
 		glfwGetFramebufferSize(window, &display_w, &display_h);
-		//RenderImGui(display_w, display_h);
+		RenderImGui(display_w, display_h);
 
 		glfwSwapBuffers(window);
 	}
