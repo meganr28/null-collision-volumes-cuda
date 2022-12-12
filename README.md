@@ -362,12 +362,13 @@ There are many interesting ways to extend this project and several features that
 - [PBRT v3 Chapter 15 - Volumetric Light Transport](https://www.pbr-book.org/3ed-2018/Light_Transport_II_Volume_Rendering)
 - [PBRT v4](https://github.com/mmp/pbrt-v4)
 
-#### Volumetric Data
+#### Volumetric Data and Environment Maps
 
 - [Open/NanoVDB Repository](https://www.openvdb.org/) - Smoke Plumes, Cloud Bunny
 - [Intel Volumetric Clouds Library](https://dpel.aswf.io/intel-cloud-library/) - Intel Cloud
 - [Disney Cloud Dataset](https://disneyanimation.com/resources/clouds/) - Disney Cloud
 - [JangaFX Free VDB Animations](https://jangafx.com/software/embergen/download/free-vdb-animations/)
+- [sIBL Archive](http://www.hdrlabs.com/sibl/archive.html) - HDR Environment Maps
 
 #### Acknowledgements
 
