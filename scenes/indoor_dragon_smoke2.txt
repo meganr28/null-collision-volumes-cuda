@@ -1,0 +1,183 @@
+// Emissive material (light)
+MATERIAL 		0
+R_COLOR        	4 9 10
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	25
+
+// Diffuse white
+MATERIAL 1
+R_COLOR         0.1 0.1 0.1
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Diffuse red
+MATERIAL 2
+R_COLOR         0.24 0.65 0.61
+T_COLOR     	0.24 0.65 0.51
+SPEC_BRDF
+IOR    			1.55
+EMITTANCE   	0
+
+// Diffuse green
+MATERIAL 3
+R_COLOR         0.05 0.05 0.09
+T_COLOR     	0 0 0
+DIFFUSE_BRDF
+IOR    			0
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 4
+R_COLOR         0.75 0.71 0.68
+T_COLOR     	0.85 0.81 0.78
+SPEC_BRDF
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 5
+R_COLOR         0.9 0.0 0.0
+T_COLOR     	0.85 0.81 0.78
+DIFFUSE_BRDF
+IOR    			1.55
+EMITTANCE   	0
+
+// Specular white
+MATERIAL 6
+R_COLOR        	1 1 1
+T_COLOR     	1 1 1
+SPEC_GLASS
+IOR    			1.55
+EMITTANCE   	0
+
+// Heterogeneous medium
+MEDIUM 0
+heterogeneous
+../scenes/vdb/bunny_cloud.vdb
+ABSORPTION 0.02
+SCATTERING 0.3
+ASYM_G     .001
+
+// Camera
+CAMERA
+RES         640 360
+FOVY        19.5
+ITERATIONS  50000
+DEPTH       1
+FILE        cornell
+FOCAL_DISTANCE	108.667
+LENS_RADIUS		1.993
+MEDIUM      -1
+EYE         0 -45 164
+LOOKAT      -10 0 0
+UP          0 1 0
+
+
+// Ceiling light
+OBJECT 0
+squareplane
+material 0
+mediuminterface -1 -1
+TRANS       -30 89 0
+ROTAT       90 0 0
+SCALE       50 50 1
+
+// Floor
+OBJECT 1
+squareplane
+material 1
+mediuminterface -1 -1
+TRANS       -30 -2 0
+ROTAT       270 0 0
+SCALE       200 200 200
+
+// Left wall
+OBJECT 2
+squareplane
+material 3
+mediuminterface -1 -1
+TRANS       -130 45.5 0
+ROTAT       0 90 0
+SCALE       200 100 200
+
+// Right wall
+OBJECT 3
+squareplane
+material 3
+mediuminterface -1 -1
+TRANS       70 45.5 0
+ROTAT       0 270 0
+SCALE       200 100 200
+
+// Back wall
+OBJECT 4
+squareplane
+material 3
+mediuminterface -1 -1
+TRANS       -30 45.5 -100
+ROTAT       0 0 0
+SCALE       200 100 200
+
+// Front wall
+OBJECT 5
+squareplane
+material 3
+mediuminterface -1 -1
+TRANS       -30 45.5 100
+ROTAT       180 0 0
+SCALE       200 100 200
+
+// Ceiling
+OBJECT 6
+squareplane
+material 1
+mediuminterface -1 -1
+TRANS       -30 90.5 0
+ROTAT       90 0 0
+SCALE       200 100 200
+
+// Dragon
+OBJECT 7
+mesh
+../scenes/dragon_medium.obj
+material 2
+mediuminterface -1 -1
+TRANS       -60 0 0
+ROTAT       90 0 0
+SCALE       20 20 20
+
+// Glass sphere
+OBJECT 8
+sphere
+material 6
+mediuminterface -1 -1
+TRANS       -15 7 35
+ROTAT       0 0 0
+SCALE       15 15 15
+
+// Reflective sphere
+OBJECT 9
+sphere
+material 2
+mediuminterface -1 -1
+TRANS       -30 10 -20
+ROTAT       0 0 0
+SCALE       20 20 20
+
+// Diffuse sphere
+OBJECT 10
+sphere
+material 3
+mediuminterface -1 -1
+TRANS       -55 4 25
+ROTAT       0 0 0
+SCALE       10 10 10
+
+
+
+
+

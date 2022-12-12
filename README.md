@@ -12,13 +12,17 @@ GPU-Accelerated Heterogeneous Volume Rendering with Null-Collisions
 ### Overview
 
 ![](img/final/final_renders/wdas_cloud_sunset.PNG)
-<p align="center"><em>WDAS Cloud rendered in a (procedural) sunset with null-scattering MIS framework</em></p>
-
-[Insert more pictures/gif/video here]
+<p align="center"><em>WDAS Cloud rendered in a (procedural) sunset with null-scattering MIS framework (5000 spp)</em></p>
 
 **Physically-based volume rendering** is widely used in the entertainment and scientific engineering fields for rendering phenomena such as clouds, fog, smoke, and fire. This usually involves complex lighting computations, especially for volumes that vary spatially and spectrally. Production renderers leverage multiple importance sampling (MIS) to accelerate image synthesis for rendering surfaces. MIS techniques for volumes are unbiased only for homogeneous media. Therefore, we require a new technique to perform MIS for heterogeneous media. 
 
 The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz/publications/miller19null.html) (Miller et al. 2019) enables us to use MIS for any media and generalizes previous techniques such as ratio tracking, delta tracking, and spectral tracking. It analytically solves for the pdf of a light path during runtime, allowing us to combine several sampling techniques at once using MIS. Additionally, null-scattering introduces fictitious matter into the volume, which does not affect light transport, but instead allows us to "homogenize" the total density and analytically sample collisions. We implement the null-scattering formulation in **CUDA** and use **NanoVDB** for loading volumetric data. 
+
+![](img/final/final_renders/wdas_cloud_sunset.PNG)
+<p align="center"><em>EmberGen Smoke Plume rendered in a galactic setting (1000 spp)</em></p>
+
+![](img/final/final_renders/wdas_cloud_sunset.PNG)
+<p align="center"><em>Mesh dragon, volumetric bunny, and assorted spheres interacting in a scene. Notice how the bunny is visible in both the reflective sphere and glass sphere and casts shadows on the ground.</em></p>
 
 ### Presentations
 
@@ -32,41 +36,40 @@ The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz
 
 ### Features Implemented
 
-- Completed
-    * Heterogeneous media
-      * Null-scattering MIS (next-event estimation and phase sampling)
-      * Delta tracking
-    * Homogeneous media
-    * Interactions between surface and media
-    * Volumes on the inside and outside of objects (medium interfaces)
-    * Loading .vdb files
-- In-Progress 
-    * Debug and remove bias in null-scattering MIS renders (white pixels show up in renders)
-    * Spectral MIS (with [hero wavelength sampling](https://cgg.mff.cuni.cz/publications/hero-wavelength-spectral-sampling/))
+* Heterogeneous media
+  * Null-scattering MIS (next-event estimation and phase sampling)
+  * Delta tracking
+* Homogeneous media
+* Interactions between surface and media
+* Volumes on the inside and outside of objects (medium interfaces)
+* Loading .vdb files with NanoVDB
+* Basic image-based lighting
+* LBVH for mesh intersection optimization
+* Interactive GUI
       
 ### Usage
 
 #### Rendering Controls
 
-- `Integrator`
-- `Importance Sampling`
-- `Max Ray Depth` - number of times light will bounce in each ray path
-- `Extra Depth Padding`
-- `Refresh Rate`
+- `Integrator` - choose between Null-Scattering MIS, Delta Tracking NEE, and Surface MIS integrator engines
+- `Importance Sampling` - choose between Unidirectional/BSDF sampling, Next Event Estimation/Direct Light sampling, and MIS which combines the two
+- `Max Ray Depth` - choose the number of times light will bounce in each ray path
+- `Extra Depth Padding` - add extra bounces to the ray path to account for passing through "invisible" AABBs
+- `Refresh Rate` - how many times the interactive render updates with the most current rendered image
 
 #### Camera Controls
 
-- `FOV`
-- `Focal Distance`
-- `Lens Radius`
+- `FOV` - changes the field of view of the camera
+- `Focal Distance` - changes the focal distance of the camera
+- `Lens Radius` - changes the lens radius of the camera
 
 #### Volumetric Controls
 
 - `Absorption` - amount of light absorbed while interacting with the medium (higher = darker)
 - `Scattering` - amount of light scattering inside of the medium (out-scattering and in-scattering)
 - `Asymmetry` - influences the direction of light scattering within the medium
-- `Density Offset`
-- `Density Scale`
+- `Density Offset` - adds a constant amount of density to the vdb grid (adding a lot effectively creates a "homogeneous" medium)
+- `Density Scale` - multiplies all the density values in the grid by a constant amount, making the contrast between empty space and particles more apparent
 
 ### Build Instructions
 
@@ -133,15 +136,30 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 
 #### Null-Scattering
 
-Include diagram with null particles here. 
+Null-collision approaches to unbiased, heterogeneous volume rendering involve augmenting a heterogeneous volume with "null particles." This is done by storing the maximum density of the volume and using it as the basis for sampling the volume. These null particles serve to "homogenize" the volume, which allows us to analytically sample the transmittance. The diagram below visualizes this process. 
+
+There are three main medium interaction events that can occur: the **absorption**, **scattering**, and **null-scattering** events. The absorption event means that the path has terminated, as the remaining light throughput has been absorb by the medium. Scattering means that Next Event Estimation is performed at the position where the scattering event occured, and then the phase function of the medium is sampled at that location to determine a new outgoing direction `wi` for the ray. This is essentially like sampling the BSDF for a surface, which generates an `wi`, a pdf value, and `f`. Finally, null scattering means that the ray continues to traverse the medium in the same direction, where a new sample point through the medium will be generated and the next interaction event will occur. 
+
+![](img/final/figures/null_scattering_diagram.png)
 
 #### Null-Scattering MIS
 
-Explain unidirectional and next-event estimation. Also explain why path integral formulation gives us an advantage over previous methods (we can calculate pdf).
+The disadvantage of previous null-collision approaches is that they do not allow us to track path pdfs throughout a volume. In order to do this, Miller et al. 2019 propose a path integral formulation of null-scattering, which allows us to compute path sampling pdfs and combine multiple unbiased sampling techniques for volumes using MIS. In this project, we implement the path integral formulation of null-scattering and combine next event estimation (direct light sampling) with unidirectional sampling (phase function/BSDF).
 
 ### Pipeline 
 
-| FullVolPathtrace Kernel Layout  | SampleChannel Kernel | 
+The CUDA kernel setup for the null-collision MIS framework is shown below in Figure XX, next to the diagram for the `Sample Participating Medium` kernel in particular. Overall, the volumetric integrator
+is similar to a normal surface integrator with MIS, with the key difference being: when a medium is entered by a ray, the `Sample Participating Medium` kernel will march through the medium until it reaches
+a scattering event, or is absorb by the medium. Additionally, due to the path integral formulation nature of the implementation, all pdfs and weights for MIS are tracked and calculated throughout all segments of the
+path. This allows for MIS within a participating medium, as well as with paths that encounter both surfaces and media.
+
+The three main events that the `sampleParticipatingMedium` kernel samples each iteration are `absorb`, `scatter`, and `null scatter`, as described above.
+
+We attempted to unroll the while loop in this function that traverses the medium into seperate kernel call iterations, but this resulted in a large number of "max depth padding" being needed
+to account for the large amount of null collisions that can occur, and it was difficult to seperate out the normal path traversal from the media traversal. Future work could look into optimizing
+iteration between and through these two events.
+
+| Null Scattering MIS Kernel Layout  | Sample Participating Media Kernel Layout | 
 |:----------:    |:-------------:  |
 | ![](img/final/figures/kernel_layout.jpg) | ![](img/final/figures/sample_medium.jpg) |
 
@@ -158,19 +176,19 @@ had to build OpenVDB to convert `.vdb` files to `.nvdb` for loading density grid
 
 #### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
-To verify that our null-scattering framework was working as expected, we followed the same lighting setups described in the paper.
+To verify that our null-scattering framework was working as expected, we followed similar lighting setups to the ones described in the paper.
  
-Case where unidirectional performs better
+Our first setup involved a thin medium with a single large area light behind the volume. In this case, we see that the unidirectional sampling performs better because the light is larger and better aligned with the sample direction returned by the phase function, which has a high magnitude asymmetry factor `g`. Next event estimation does not perform well because the light is large and more samples will be taken in directions that do not contribute to the incoming radiance. By using MIS, we can efficiently handle this scene by combining the contributions of Unidirectional Sampling and Next Event Estimation. 
 
 | Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
 |:----------:    |:-------------:  |:-------------:  |
 | ![](img/final/performance/uni_low_density_200iter.PNG) | ![](img/final/performance/nee_low_density_200iter.PNG) | ![](img/final/performance/mis_low_density_200iter.PNG)
 
-Case where NEE performs better
+Our second setup involved a dense medium with a small area light on the left-hand side. Here, we see that unidirectional sampling does not perform well because the light is small and easy to miss by our phase function sample directions. Next event estimation, on the other hand, performs very well in this case since sampling the small light source directly ensures that each point adequately receives the incoming radiance. As expected, MIS is able to efficiently handle this case. 
 
 | Unidirectional  | Next-Event Estimation (NEE) | Unidirectional + NEE
 |:----------:    |:-------------:  |:-------------:  |
-| ![](img/final/performance/uni_high_density_200iter.PNG) | ![](img/final/performance/nee_high_density_200iter.PNG) | ![](img/final/performance/mis_high_density_200iter.PNG)
+| ![](img/final/performance/uni_gg.PNG) | ![](img/final/performance/nee_gg.PNG) | ![](img/final/performance/mis_gg.PNG)
 
 #### Varying Coefficients
 
@@ -236,7 +254,9 @@ with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `end
 
 #### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
-[Discussion here - see above pictures for results]
+Figures XX and XX show the performance results on the two MIS testing scenes from above. Because in our integrator we use the same sampled wi for both GI and
+also BSDF/Phase function sampling, the unidirectional importance sampling technique is fastest. However, as mentioned above, there are cases where one or the other
+is not as good at obtaining the incoming light information, so MIS is a good strategy to have given it comes at a relatively low performance cost.
 
 ![](img/final/performance/graphs/mis_low_density.png)
 
@@ -244,18 +264,24 @@ with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `end
 
 #### Varying Absorption, Scattering, and Phase Asymmetry
 
-Figure XX below showcases the impact of varying the absorption, scattering, and
-ph
+Figure XX below showcases the impact of varying the absorption coefficient for the medium. The runtime impact
+of increasing this value appears to be roughly linear. This makes sense, as the rate of sample points along a ray within a medium is
+dependent on the coefficients of absorption and scattering.
 
 ![](img/final/performance/graphs/absorption.png)
 
-Figure XX below showcases the impact of varying the absorption, scattering, and
-ph
+Figure XX below showcases the impact of varying the scattering coefficient for the medium. The runtime impact
+of increasing this value appears to also be roughly linear, for about the same reason as increasing the absorption.
+However, the slope of the linear increase is far greater, as increasing the scattering will increase the amount of rays
+that bounce through multiple-scattering and global-illumination paths, thus causing signifcant performance drawbacks.
+Doubling the scattering coefficient, while making the medium look more cloud-like, will result in a 2x performance hit.
 
 ![](img/final/performance/graphs/scattering.png)
 
-Figure XX below showcases the impact of varying the absorption, scattering, and
-ph
+Figure XX below showcases the impact of varying the phase function asymmetry of the medium. Because the phase function
+does not factor into the rate of sample points along a ray travelling through a medium, varying the asymmetry does not
+really have an impact on performance in terms of runtime. As was shown above, it does have an impact on convergence, however,
+depending on the importance sampling strategy chosen.
 
 ![](img/final/performance/graphs/asymmetry.png)
 
@@ -269,6 +295,11 @@ cases all of the additional depth is spent inside the same volume.
 ![](img/final/performance/graphs/max_depth.png)
 
 #### Varying Media Density Scale
+
+Figure XX below showcases the performance impact of increasing the scale of the density data within the vdb structure.
+While increasing the scale increases the amount of the volume that interacts with light and creates much more detail in the
+volumetric data, it also increases the performance time as well. And, naturally, scaling up all the density values also increases
+the max density, and so this is where the performance hit is obtained.
 
 ![](img/final/performance/graphs/density_scale.png)
 
@@ -322,7 +353,7 @@ There are many interesting ways to extend this project and several features that
 - Spectral MIS
 - Subsurface scattering
 - Bidirectional path tracing
-- Further Optimization
+- Further optimization
 
 ### References
 
