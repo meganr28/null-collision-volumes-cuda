@@ -22,7 +22,7 @@ The [null-scattering path integral formulation](https://cs.dartmouth.edu/wjarosz
 <p align="center"><em>EmberGen Smoke Plume rendered in a galactic setting (1000 spp)</em></p>
 
 ![](img/final/final_renders/bunny_and_dragon.png)
-<p align="center"><em>Mesh dragon, volumetric bunny, and assorted spheres interacting in a scene. Notice how the bunny is visible in both the reflective sphere and glass sphere and casts shadows on the ground.</em></p>
+<p align="center"><em>Mesh dragon, volumetric bunny, and assorted spheres interacting in a scene. Notice how the bunny is visible in both the reflective sphere and glass sphere and casts shadows on the ground (1000 spp)</em></p>
 
 ### Presentations
 
@@ -136,7 +136,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME} OpenVDB::openvdb)
 
 Null-collision approaches to unbiased, heterogeneous volume rendering involve augmenting a heterogeneous volume with "null particles." This is done by storing the maximum density of the volume and using it as the basis for sampling the volume. These null particles serve to "homogenize" the volume, which allows us to analytically sample the transmittance. The diagram below visualizes this process. 
 
-There are three main medium interaction events that can occur: the **absorption**, **scattering**, and **null-scattering** events. The absorption event means that the path has terminated, as the remaining light throughput has been absorb by the medium. Scattering means that Next Event Estimation is performed at the position where the scattering event occured, and then the phase function of the medium is sampled at that location to determine a new outgoing direction `wi` for the ray. This is essentially like sampling the BSDF for a surface, which generates an `wi`, a pdf value, and `f`. Finally, null scattering means that the ray continues to traverse the medium in the same direction, where a new sample point through the medium will be generated and the next interaction event will occur. 
+There are three main medium interaction events that can occur: the **absorption**, **scattering**, and **null-scattering** events. The absorption event means that the path has terminated, as the remaining light throughput has been absorbed by the medium. Scattering means that Next Event Estimation is performed at the position where the scattering event occured, and then the phase function of the medium is sampled at that location to determine a new outgoing direction `wi` for the ray. This is essentially like sampling the BSDF for a surface, which generates an `wi`, a pdf value, and `f`. Finally, null scattering means that the ray continues to traverse the medium in the same direction, where a new sample point through the medium will be generated and the next interaction event will occur. 
 
 ![](img/final/figures/null_scattering_diagram.png)
 
@@ -174,7 +174,7 @@ had to build OpenVDB to convert `.vdb` files to `.nvdb` for loading density grid
 
 #### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
-To verify that our null-scattering framework was working as expected, we followed similar lighting setups to the ones described in the paper.
+To verify that our null-scattering framework was working as expected, we followed similar lighting setups to the ones described in the paper. These images were taken after 20 samples.
  
 Our first setup involved a thin medium with a single large area light behind the volume. In this case, we see that the unidirectional sampling performs better because the light is larger and better aligned with the sample direction returned by the phase function, which has a high magnitude asymmetry factor `g`. Next event estimation does not perform well because the light is large and more samples will be taken in directions that do not contribute to the incoming radiance. By using MIS, we can efficiently handle this scene by combining the contributions of Unidirectional Sampling and Next Event Estimation. 
 
@@ -234,10 +234,11 @@ The phase function of a volume is analogous to the BSDF of a surface since it de
 
 #### Testing Parameters
 
-The following performance results were obtained 
+To obtain the following performance results, we wrapped the call to our `fullVolPathtrace` function
+with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `endGpuTimer`. We recorded the average rendering time over 
+20 iterations. For testing, we turned GUI rendering off (this took about 20 ms of render time). 
 
-The camera and lighting parameters are the same between the two scenes; the only difference is the setting in which we placed
-smoke plume. Unless otherwise noted, we used these additional parameters:
+The camera and lighting parameters stayed constant between tests. Unless otherwise noted, we used these additional parameters:
 
 - `Absorption`: 0.02
 - `Scattering`: 0.2061
@@ -245,10 +246,6 @@ smoke plume. Unless otherwise noted, we used these additional parameters:
 - `Iteration Count`: 20
 - `Ray Depth`: 1
 - `Resolution`: 800 x 800
-
-For testing, we turned GUI rendering off (this took about 20 ms of render time). We wrapped the call to our `fullVolPathtrace` function
-with a call to our `PerformanceTimer` class's functions `startGpuTimer` and `endGpuTimer`. We recorded the average rendering time over 
-20 iterations. 
 
 #### Unidirectional, Next-Event Estimation (NEE), and Uni + NEE MIS
 
